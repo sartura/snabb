@@ -54,6 +54,8 @@ local default = {
    }
 }
 
+local debug = _G.developer_debug
+
 local function pass (...) return ... end
 
 
@@ -166,7 +168,11 @@ do
       -- (write to illegal address) instead of overwriting physical
       -- memory near address 0.
       ffi.fill(ptr, 0xff, num_descriptors * ffi.sizeof(ct))
-      ptr = lib.bounds_checked(ct, ptr, 0, num_descriptors)
+      if debug then
+	 ptr = lib.bounds_checked(ct, ptr, 0, num_descriptors)
+      else
+	 ptr = ffi.cast(ffi.typeof("$*", ct), ptr)
+      end
       return ptr, phy
    end
 
