@@ -3,18 +3,8 @@ local yang = require('parser')
 
 sr = require("libsysrepoLua")
 
-local YANG_MODEL = "snabb-softwire-v1"
-local ID = ""
-
--- ################ debug functions ##########################
-local function read_file(path)
-    local file = io.open(path, "rb") -- r read mode and b binary mode
-    if not file then return nil end
-    local content = file:read "*a" -- *a or *all reads the whole file
-    file:close()
-    return content
-end
--- ################ debug functions ##########################
+local YANG_MODEL = nil
+local ID = nil
 
 function string.starts(String,Start)
    return string.sub(String,1,string.len(Start))==Start
@@ -156,10 +146,20 @@ local function load_snabb_data()
     local conn_snabb = sr.Connection("application")
     local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP)
 
-    local filePath = "/opt/fork/snabb/sysrepo/DT.conf"
-    local fileContent = read_file(filePath)
+    local content
+    local COMMAND = "../src/snabb config get " .. ID .. ' "/"'
+    io.write("COMMAND: " .. COMMAND .. "\n")
+    local handle = io.popen(COMMAND)
+    local result = handle:read("*a")
+    if (result == "") then
+        print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
+        print("|" .. result .. "|")
+    else
+        content = result
+    end
+    handle:close()
 
-    local parsed_data = yang.parse_file(filePath)
+    local parsed_data = yang.parse(content, nil)
     map_to_xpath(parsed_data, "", sess_snabb)
 
     print("\n\n ========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========\n\n")
@@ -210,41 +210,52 @@ end
 function print_change(op, old_val, new_val)
     -- prepare xpath
     -- remove "'" from key
-    local xpath = new_val:xpath():gsub("'","")
     -- remove "'" from key
-    xpath = new_val:xpath():gsub("'","")
+    local xpath = nil
+    if (op == sr.SR_OP_DELETED) then
+        xpath = old_val:xpath():gsub("'","")
+    elseif (op == sr.SR_OP_MODIFIED or op == sr.SR_OP_CREATED) then
+        xpath = new_val:xpath():gsub("'","")
+    elseif (op == sr.SR_OP_MOVED) then
+        xpath = new_val:xpath():gsub("'","")
+    end
     -- remove yang model from start
     xpath = "/" .. string.sub(xpath, string.len("/" .. YANG_MODEL .. ":") + 1)
+    -- remove softwire-config
+    if string.starts(xpath, "/softwire-config") then
+        xpath = string.sub(xpath, string.len("/softwire-config") + 1)
+    end
+ 
 
     if (op == sr.SR_OP_DELETED) then
-           io.write ("DELETED: ")
-           io.write(old_val:to_string())
-           --local COMMAND = "./snabb config remove " .. ID .. " " .. xpath .. " " .. print_value(new_val)
-           --io.write("COMMAND: " .. COMMAND)
-           --local handle = io.popen(COMMAND)
-           --local result = handle:read("*a")
-           --if (result ~= "") then
-           --    print("ERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-           --    print("|" .. result .. "|")
-           --end
-           --handle:close()
+        io.write ("DELETED: ")
+        io.write(old_val:to_string())
+        local COMMAND = "../src/snabb config remove " .. ID .. " " .. xpath .. " " .. print_value(old_val)
+        io.write("COMMAND: " .. COMMAND)
+        local handle = io.popen(COMMAND)
+        local result = handle:read("*a")
+        if (result ~= "") then
+            print("ERROR message from snabb config.\nCOMMAND: " .. COMMAND)
+            print("|" .. result .. "|")
+        end
+        handle:close()
     elseif (op == sr.SR_OP_MODIFIED or op == sr.SR_OP_CREATED) then
-           io.write ("MODIFIED: ")
-           io.write ("old value ")
-           io.write(old_val:to_string())
-           io.write ("new value ")
-           io.write(new_val:to_string())
-           --if (print_value(new_val) ~= nil) then
-           --    local COMMAND = "./snabb config set " .. ID .. " " .. xpath .. " " .. print_value(new_val)
-           --    io.write("COMMAND: " .. COMMAND .. "\n")
-           --    local handle = io.popen(COMMAND)
-           --    local result = handle:read("*a")
-           --    if (result ~= "") then
-           --        print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-           --        print("|" .. result .. "|")
-           --    end
-           --    handle:close()
-           --end
+        io.write ("MODIFIED: ")
+        io.write ("old value ")
+        io.write(old_val:to_string())
+        io.write ("new value ")
+        io.write(new_val:to_string())
+        if (print_value(new_val) ~= nil) then
+            local COMMAND = "../src/snabb config set " .. ID .. " " .. xpath .. " " .. print_value(new_val)
+            io.write("COMMAND: " .. COMMAND .. "\n")
+            local handle = io.popen(COMMAND)
+            local result = handle:read("*a")
+            if (result ~= "") then
+                print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
+                print("|" .. result .. "|")
+            end
+            handle:close()
+        end
     elseif (op == sr.SR_OP_MOVED) then
         -- TODO
         io.write ("MOVED: " .. new_val:xpath() .. " after " .. old_val:xpath() .. "\n")
@@ -296,6 +307,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
 
 	print("\n\n ========== END OF CHANGES =======================================\n\n")
 
+        sess:commit()
         collectgarbage()
     end
 
