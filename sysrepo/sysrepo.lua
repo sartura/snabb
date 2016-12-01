@@ -270,7 +270,7 @@ function apply_change(op, old_val, new_val)
             io.write ("MOVED: " .. new_val:xpath() .. " after " .. old_val:xpath() .. "\n")
         end
     end
-    return false
+    return true
 end
 
 -- Function to print current configuration state.
@@ -317,7 +317,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
         while true do
             change = sess:get_change_next(it)
             if (change == nil) then break end
-            if (apply_change(change:oper(), change:old_val(), change:new_val())) then
+            if (apply_change(change:oper(), change:old_val(), change:new_val()) == false) then
                 collectgarbage()
                 return tonumber(sr.SR_ERR_VALIDATION_FAILED)
             end
