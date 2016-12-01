@@ -207,7 +207,7 @@ function print_value(value)
 end
 
 -- Helper function for printing changes given operation, old and new value.
-function print_change(op, old_val, new_val)
+function apply_change(op, old_val, new_val)
     -- prepare xpath
     -- remove "'" from key
     -- remove "'" from key
@@ -228,24 +228,30 @@ function print_change(op, old_val, new_val)
  
 
     if (op == sr.SR_OP_DELETED) then
-        io.write ("DELETED: ")
-        io.write(old_val:to_string())
-        local COMMAND = "../src/snabb config remove " .. ID .. " " .. xpath .. " " .. print_value(old_val)
-        io.write("COMMAND: " .. COMMAND)
-        local handle = io.popen(COMMAND)
-        local result = handle:read("*a")
-        if (result ~= "") then
-            print("ERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-            print("|" .. result .. "|")
+        if (old_val ~= nil) then
+            io.write ("DELETED: ")
+            io.write(old_val:to_string())
+            local COMMAND = "../src/snabb config remove " .. ID .. " " .. xpath
+            io.write("COMMAND: " .. COMMAND)
+            local handle = io.popen(COMMAND)
+            local result = handle:read("*a")
+            if (result ~= "") then
+                print("ERROR message from snabb config.\nCOMMAND: " .. COMMAND)
+                print("|" .. result .. "|")
+                handle:close()
+                return false
+            end
+            handle:close()
         end
-        handle:close()
     elseif (op == sr.SR_OP_MODIFIED or op == sr.SR_OP_CREATED) then
-        io.write ("MODIFIED: ")
-        io.write ("old value ")
-        io.write(old_val:to_string())
-        io.write ("new value ")
-        io.write(new_val:to_string())
-        if (print_value(new_val) ~= nil) then
+        if (new_val ~= nil and old_val ~= nil) then
+            io.write ("MODIFIED: ")
+            if (op == sr.SR_OP_MODIFIED) then
+                io.write ("old value ")
+                io.write(old_val:to_string())
+            end
+            io.write ("new value ")
+            io.write(new_val:to_string())
             local COMMAND = "../src/snabb config set " .. ID .. " " .. xpath .. " " .. print_value(new_val)
             io.write("COMMAND: " .. COMMAND .. "\n")
             local handle = io.popen(COMMAND)
@@ -253,13 +259,18 @@ function print_change(op, old_val, new_val)
             if (result ~= "") then
                 print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
                 print("|" .. result .. "|")
+                handle:close()
+                return false
             end
             handle:close()
         end
     elseif (op == sr.SR_OP_MOVED) then
-        -- TODO
-        io.write ("MOVED: " .. new_val:xpath() .. " after " .. old_val:xpath() .. "\n")
+        if (new_val ~= nil) then
+            -- TODO
+            io.write ("MOVED: " .. new_val:xpath() .. " after " .. old_val:xpath() .. "\n")
+        end
     end
+    return false
 end
 
 -- Function to print current configuration state.
@@ -288,6 +299,10 @@ end
 function module_change_cb(sess, module_name, event, private_ctx)
     print("\n\n ========== CONFIG HAS CHANGED, CURRENT RUNNING CONFIG: ==========\n\n")
 
+    if (event ~= sr.SR_EV_APPLY) then
+        return tonumber(sr.SR_ERR_OK)
+    end
+
     function run()
         -- print_current_config(sess, module_name)
 
@@ -302,7 +317,10 @@ function module_change_cb(sess, module_name, event, private_ctx)
         while true do
             change = sess:get_change_next(it)
             if (change == nil) then break end
-            print_change(change:oper(), change:old_val(), change:new_val())
+            if (apply_change(change:oper(), change:old_val(), change:new_val())) then
+                collectgarbage()
+                return tonumber(sr.SR_ERR_VALIDATION_FAILED)
+            end
 	end
 
 	print("\n\n ========== END OF CHANGES =======================================\n\n")
@@ -336,7 +354,7 @@ function run()
     subscribe = sr.Subscribe(sess)
 
     wrap = sr.Callback_lua(module_change_cb)
-    subscribe:module_change_subscribe(YANG_MODEL, wrap, nil, 0, sr.SR_SUBSCR_APPLY_ONLY)
+    subscribe:module_change_subscribe(YANG_MODEL, wrap)
 
     print("\n\n ========== STARTUP CONFIG APPLIED AS RUNNING ==========\n\n")
 
