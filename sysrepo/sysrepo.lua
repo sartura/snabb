@@ -13,40 +13,6 @@ local sr = require("libsysrepoLua")
 local YANG_MODEL = nil
 local ID = nil
 
-local function print_r (t)
-    local print_r_cache={}
-    local function sub_print_r(t,indent)
-        if (print_r_cache[tostring(t)]) then
-            print(indent.."*"..tostring(t))
-        else
-            print_r_cache[tostring(t)]=true
-            if (type(t)=="table") then
-                for pos,val in pairs(t) do
-                    if (type(val)=="table") then
-                        print(indent.."["..pos.."] => "..tostring(t).." {")
-                        sub_print_r(val,indent..string.rep(" ",string.len(pos)+8))
-                        print(indent..string.rep(" ",string.len(pos)+6).."}")
-                    elseif (type(val)=="string") then
-                        print(indent.."["..pos..'] => "'..val..'"')
-                    else
-                        print(indent.."["..pos.."] => "..tostring(val))
-                    end
-                end
-            else
-                print(indent..tostring(t))
-            end
-        end
-    end
-    if (type(t)=="table") then
-        print(tostring(t).." {")
-        sub_print_r(t,"  ")
-        print("}")
-    else
-        sub_print_r(t,"  ")
-    end
-    print()
-end
-
 function string.starts(String,Start)
    return string.sub(String,1,string.len(Start))==Start
 end
@@ -249,7 +215,6 @@ function module_change_cb(sess, module_name, event, private_ctx)
     local delete_all = true
     local acc = {xpath = nil, action = nil, count = 0}
 
-print("action -> " .. tostring(acc.action))
     local function sysrepo_call()
 	local change_path = "/" .. module_name .. ":*"
         local it = sess:get_changes_iter(change_path)
@@ -290,7 +255,6 @@ print("action -> " .. tostring(acc.action))
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
-print("action -> " .. tostring(acc.action))
     local list_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
     if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
         acc.xpath = list_xpath
@@ -304,7 +268,6 @@ print("action -> " .. tostring(acc.action))
         action_list:set(acc.xpath, YANG_MODEL, ID, acc.count)
     end
 
-print_r(action_list)   
     if (action_list[1]:send() == false) then
         collectgarbage()
         return tonumber(sr.SR_ERR_INTERNAL)

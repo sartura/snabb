@@ -87,7 +87,7 @@ function Snabb:send()
     end
     local handle = io.popen(COMMAND)
     local result = handle:read("*a")
-    print("COMMAND -> " .. COMMAND)
+    --print("COMMAND -> " .. COMMAND)
     if (result ~= "") then
         handle:close()
         print("ERROR:"..result)
@@ -116,35 +116,37 @@ local function fill_br_address(xpath, yang_model, id)
     return snabb.new("set", xpath, br_address, id, yang_model)
 end
 
-local function print_trees(trees)
-    local result = nil
+local function print_trees(trees, xpath)
+    local result = ""
 
-    local function print_tree(tree)
-        local result = " " .. tree:parent():name() .. " {"
+    local function sub_tree_length(tree)
+        local count = 0
+        if (tree == nil) then return count end
         while true do
-            if (print_value(tree) ~= nil) then
-	        result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
-            else
-                result = result .. tostring(print_tree(tree:first_child()))
-            end
+            count = count + 1
             tree = tree:next()
             if tree == nil then break end
         end
-        result = result .. "}"
-        return result
+        return count
     end
 
-    result = "{"
+    if string.ends(xpath, "]") then result = result .. "{" end
+    local count = 0
     for i = 0, trees:tree_cnt() -1, 1 do
         local tree = trees:tree(i)
+        if count > 0 then
+            count = count - 1
+            if (count == 0) then result = result .. "}"; count = count - 1 end
+        end
         if trees:tree_cnt() == 1 then return print_value(trees:tre(i)) end
         if (print_value(tree) ~= nil) then
             result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
         else
-            result = result .. print_tree(tree:first_child())
+            count = sub_tree_length(tree:first_child()) + 1
+            result = result .. " " .. tree:name() .." {"
         end
     end
-    result = result .. "}"
+    if string.ends(xpath, "]") then result = result .. "}" end
 
     return result
 end
@@ -168,7 +170,7 @@ local function fill_subtrees(yang_model, id, xpath, action, count)
         local trees = sess_snabb:get_subtrees(session_xpath)
         if trees == nil then return end
         if trees:tree_cnt() == 1 and count == 1 then result = print_value(trees:tree(0)); return; end
-        result = print_trees(trees)
+        result = print_trees(trees, xpath)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res); return nil end
 
