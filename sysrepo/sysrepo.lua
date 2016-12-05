@@ -1,12 +1,53 @@
+local require_rel
+if arg and arg[0] then
+    package.path = arg[0]:match("(.-)[^\\/]+$") .. "?.lua;" .. package.path
+    require_rel = require
+end
+
 local params = {...}
-local yang = require('parser')
+local yang = require_rel('parser')
+local snabb = require_rel('snabb')
 
-sr = require("libsysrepoLua")
+local sr = require("libsysrepoLua")
 
-local YANG_MODEL = "snabb-softwire-v1"
-local ID = ""
+local YANG_MODEL = nil
+local ID = nil
 
 -- ################ debug functions ##########################
+local function print_r (t)
+    local print_r_cache={}
+    local function sub_print_r(t,indent)
+        if (print_r_cache[tostring(t)]) then
+            print(indent.."*"..tostring(t))
+        else
+            print_r_cache[tostring(t)]=true
+            if (type(t)=="table") then
+                for pos,val in pairs(t) do
+                    if (type(val)=="table") then
+                        print(indent.."["..pos.."] => "..tostring(t).." {")
+                        sub_print_r(val,indent..string.rep(" ",string.len(pos)+8))
+                        print(indent..string.rep(" ",string.len(pos)+6).."}")
+                    elseif (type(val)=="string") then
+                        print(indent.."["..pos..'] => "'..val..'"')
+                    else
+                        print(indent.."["..pos.."] => "..tostring(val))
+                    end
+                end
+            else
+                print(indent..tostring(t))
+            end
+        end
+    end
+    if (type(t)=="table") then
+        print(tostring(t).." {")
+        sub_print_r(t,"  ")
+        print("}")
+    else
+        sub_print_r(t,"  ")
+    end
+    print()
+end
+
 local function read_file(path)
     local file = io.open(path, "rb") -- r read mode and b binary mode
     if not file then return nil end
@@ -23,7 +64,30 @@ function string.ends(String,End)
    return End=='' or string.sub(String,-string.len(End))==End
 end
 
-function get_key_value(s, xpath)
+function string.compare(First, Second)
+    if (First == nil or Second == nil) then return nil end
+    local match = 0
+    for i = 1, string.len(First) do
+        if (i > string.len(Second)) then break end
+        if (string.sub(First,i,i) ~= string.sub(Second,i,i)) then break end
+	match = i
+    end
+    return string.sub(First,1,match)
+end
+
+function string.compare_xpath(First, Second)
+    if (First == nil or Second == nil) then return nil end
+    local match = 0
+    for i = 1, string.len(First) do
+        if (i > string.len(Second)) then break end
+        if (string.sub(First,i,i) ~= string.sub(Second,i,i)) then break end
+	match = i
+    end
+    return string.sub(First,1,match)
+end
+
+
+local function get_key_value(s, xpath)
     local keys = ""
     if (xpath == "/binding-table/psid-map") then
         for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
@@ -64,14 +128,14 @@ local yang_uint32 = {"/period", "/max-fragments-per-packet", "/max-packets", "/b
 local yang_bool = {"/allow-incoming-icmp", "/generate-icmp-errors", "/hairpinning"}
 local yang_keys = {"/psid", "/addr"}
 
-function contains(list, xpath)
+local function contains(list, xpath)
     for key, value in pairs(list) do
         if string.ends(xpath, value) then return true end
     end
     return false
 end
 
-function send_to_sysrepo(sess_snabb, xpath, value)
+local function send_to_sysrepo(sess_snabb, xpath, value)
     -- hack for missing "binding-table"
     -- replace 'internal-interface' with 'softwire-config/internal-interface'
     if ("/internal-interface" == string.sub(xpath, 1, string.len("/internal-interface"))) then
@@ -83,7 +147,7 @@ function send_to_sysrepo(sess_snabb, xpath, value)
 
     -- sysrepo expects format "/yang-model:container/..
     xpath = "/snabb-softwire-v1:" .. string.sub(xpath, 2)
-    function set()
+    local function set()
         if contains(yang_keys, xpath) then
             -- skip yang keys, will generate sysrepo logs
         elseif contains(yang_string, xpath) then
@@ -108,11 +172,10 @@ function send_to_sysrepo(sess_snabb, xpath, value)
            end
         end
     end
-    -- this operation will fail for key values
-    ok,res=pcall(set)
+    ok,res=pcall(set) if not ok then print(res) end
 end
 
-function map_to_xpath(s, path, sess_snabb)
+local function map_to_xpath(s, path, sess_snabb)
     local ts = type(s)
     if (ts ~= "table") then
         send_to_sysrepo(sess_snabb, path, s)
@@ -144,11 +207,7 @@ local function clean_startup_datastore()
        sess_snabb:delete_item("/"..YANG_MODEL..":*")
        sess_snabb:commit()
     end
-
-    ok,res=pcall(clean)
-    if not ok then
-        print("\nError: ", res, "\nNo data in sysrepo datastore.", "\n")
-    end
+    ok,res=pcall(clean) if not ok then end
 end
 
 local function load_snabb_data()
@@ -156,158 +215,126 @@ local function load_snabb_data()
     local conn_snabb = sr.Connection("application")
     local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP)
 
-    local filePath = "/opt/fork/snabb/sysrepo/DT.conf"
-    local fileContent = read_file(filePath)
+    -- local content
+    -- local COMMAND = "../src/snabb config get " .. ID .. ' "/"'
+    -- io.write("COMMAND: " .. COMMAND .. "\n")
+    -- local handle = io.popen(COMMAND)
+    -- local result = handle:read("*a")
+    -- if (result == "") then
+    --     print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
+    --     print("|" .. result .. "|")
+    -- else
+    --     content = result
+    -- end
+    -- handle:close()
 
-    local parsed_data = yang.parse_file(filePath)
+    local filePath = "/opt/fork/snabb/sysrepo/lwaftr.conf"
+    local content = read_file(filePath)
+
+    local parsed_data = yang.parse(content, nil)
     map_to_xpath(parsed_data, "", sess_snabb)
 
-    print("\n\n ========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========\n\n")
+    print("========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========")
     sess_snabb:commit()
     collectgarbage()
 end
 
--- return string value representation
-function print_value(value)
-   if (value:type() == sr.SR_CONTAINER_T) then
-      return nil
-   elseif (value:type() == sr.SR_CONTAINER_PRESENCE_T) then
-      return nil
-   elseif (value:type() == sr.SR_LIST_T) then
-      return nil
-   elseif (value:type() == sr.SR_STRING_T) then
-      return value:data():get_string()
-   elseif (value:type() == sr.SR_BOOL_T) then
-         return tostring(value:data():get_bool())
-   elseif (value:type() == sr.SR_INT8_T) then
-      return tostring(value:data():get_int8())
-   elseif (value:type() == sr.SR_INT16_T) then
-      return tostring(value:data():get_int16())
-   elseif (value:type() == sr.SR_INT32_T) then
-      return tostring(value:data():get_int32())
-   elseif (value:type() == sr.SR_INT64_T) then
-      return tostring(value:data():get_int64())
-   elseif (value:type() == sr.SR_UINT8_T) then
-      return tostring(value:data():get_uint8())
-   elseif (value:type() == sr.SR_UINT16_T) then
-      return tostring(value:data():get_uint16())
-   elseif (value:type() == sr.SR_UINT32_T) then
-      return tostring(value:data():get_uint32())
-   elseif (value:type() == sr.SR_UINT64_T) then
-      return tostring(value:data():get_uint64())
-   elseif (value:type() == sr.SR_IDENTITYREF_T) then
-      return tostring(value:data():get_identityref())
-   elseif (value:type() == sr.SR_BITS_T) then
-      return tostring(value:data():get_bits())
-   elseif (value:type() == sr.SR_BINARY_T) then
-      return tostring(value:data():get_binary())
-   else
-      return nil
-   end
-end
-
--- Helper function for printing changes given operation, old and new value.
-function print_change(op, old_val, new_val)
-    -- prepare xpath
-    -- remove "'" from key
-    local xpath = new_val:xpath():gsub("'","")
-    -- remove "'" from key
-    xpath = new_val:xpath():gsub("'","")
-    -- remove yang model from start
-    xpath = "/" .. string.sub(xpath, string.len("/" .. YANG_MODEL .. ":") + 1)
-
-    if (op == sr.SR_OP_DELETED) then
-           io.write ("DELETED: ")
-           io.write(old_val:to_string())
-           --local COMMAND = "./snabb config remove " .. ID .. " " .. xpath .. " " .. print_value(new_val)
-           --io.write("COMMAND: " .. COMMAND)
-           --local handle = io.popen(COMMAND)
-           --local result = handle:read("*a")
-           --if (result ~= "") then
-           --    print("ERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-           --    print("|" .. result .. "|")
-           --end
-           --handle:close()
-    elseif (op == sr.SR_OP_MODIFIED or op == sr.SR_OP_CREATED) then
-           io.write ("MODIFIED: ")
-           io.write ("old value ")
-           io.write(old_val:to_string())
-           io.write ("new value ")
-           io.write(new_val:to_string())
-           --if (print_value(new_val) ~= nil) then
-           --    local COMMAND = "./snabb config set " .. ID .. " " .. xpath .. " " .. print_value(new_val)
-           --    io.write("COMMAND: " .. COMMAND .. "\n")
-           --    local handle = io.popen(COMMAND)
-           --    local result = handle:read("*a")
-           --    if (result ~= "") then
-           --        print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-           --        print("|" .. result .. "|")
-           --    end
-           --    handle:close()
-           --end
-    elseif (op == sr.SR_OP_MOVED) then
-        -- TODO
-        io.write ("MOVED: " .. new_val:xpath() .. " after " .. old_val:xpath() .. "\n")
-    end
-end
-
 -- Function to print current configuration state.
 -- It does so by loading all the items of a session and printing them out.
-function print_current_config(sess, module_name)
+local function print_current_config(sess, module_name)
 
-    function run()
+    local function sysrepo_call()
         xpath = "/" .. module_name .. ":*//*"
         values = sess:get_items(xpath)
 
 	if (values == nil) then return end
-
 	for i=0, values:val_cnt() - 1, 1 do
             io.write(values:val(i):to_string())
 	end
     end
-
-    ok,res=pcall(run)
-    if not ok then
-        print("\nerror: ",res, "\n")
-    end
-
+    ok,res=pcall(sysrepo_call) if not ok then print(res) end
 end
 
 -- Function to be called for subscribed client of given session whenever configuration changes.
 function module_change_cb(sess, module_name, event, private_ctx)
-    print("\n\n ========== CONFIG HAS CHANGED, CURRENT RUNNING CONFIG: ==========\n\n")
+    if (event ~= sr.SR_EV_APPLY) then return tonumber(sr.SR_ERR_OK) end
 
-    function run()
-        -- print_current_config(sess, module_name)
+    local action_list = {}
+    local delete_all = true
+    local  acc = {xpath = nil, action = nil, count = 0}
 
-        print("\n\n ========== CONFIG HAS CHANGED, CURRENT RUNNING CONFIG: ==========\n\n")
-
-        print("\n\n ========== CHANGES: =============================================\n\n")
-
-        change_path = "/" .. module_name .. ":*"
-
-        it = sess:get_changes_iter(change_path)
+    local function sysrepo_call()
+	local change_path = "/" .. module_name .. ":*"
+        local it = sess:get_changes_iter(change_path)
 
         while true do
-            change = sess:get_change_next(it)
+            local change = sess:get_change_next(it)
             if (change == nil) then break end
-            print_change(change:oper(), change:old_val(), change:new_val())
+	    acc.count = acc.count + 1
+            if (change:oper() ~= sr.SR_OP_DELETED) then delete_all = false end
+	    local op = change:oper()
+	    local new = change:new_val()
+	    local old = change:old_val()
+	    if (op == sr.SR_OP_DELETED) then
+                if (acc.xpath == nil) then
+                    acc.xpath = old:xpath()
+		    acc.action = "delete"
+	        else
+		    local change = string.compare(old:xpath(), acc.xpath)
+		    if (change == old:xpath() and snabb.print_value(old) == nil and delete_all) then
+                        acc.xpath = change
+                        acc.action = "delete"
+                    else
+                        acc.xpath = change
+                        acc.action = "set"
+                    end
+                end
+	    elseif (op == sr.SR_OP_CREATED or op == sr.SR_OP_CREATED) then
+                delete_all = false
+		acc.action = "set"
+                if (acc.xpath == nil) then
+                    acc.xpath = new:xpath()
+                else
+		    local change = string.compare(new:xpath(), acc.xpath)
+		    acc.xpath = change
+	        end
+            end
 	end
+    end
+    ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
-	print("\n\n ========== END OF CHANGES =======================================\n\n")
-
-        collectgarbage()
+    local list_xpath = "/snabb-softwire-v1:binding-table"
+    if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
+        acc.xpath = list_xpath .. "/*"
+	acc.action = "set"
     end
 
-    ok,res=pcall(run)
-    if not ok then
-        print("\nerror: ",res, "\n")
+    local list_xpath = "/snabb-softwire-v1:softwire-config"
+    if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
+        acc.xpath = list_xpath .."/*"
+	acc.action = "set"
     end
+
+print("xpath -> " .. acc.xpath)
+    if acc.count > 1 then
+        acc.xpath = acc.xpath .. ""
+    end
+
+    local action_list = snabb.new_action(YANG_MODEL, ID)
+    if acc.action == "delete" then
+        action_list:delete(acc.xpath)
+    elseif acc.action == "set" then
+        action_list:set(acc.xpath)
+    end
+    print_r(action_list)
+
+
+    collectgarbage()
     return tonumber(sr.SR_ERR_OK)
 end
 
 -- Main client function.
-function run()
+function main()
     if (params[1] == nil and params[2] == nil) then
         print("Please enter first parameter, the yang model and the ID for second")
         return
@@ -320,25 +347,19 @@ function run()
 
     conn = sr.Connection("application")
     sess = sr.Session(conn, sr.SR_DS_RUNNING)
-
     subscribe = sr.Subscribe(sess)
-
     wrap = sr.Callback_lua(module_change_cb)
-    subscribe:module_change_subscribe(YANG_MODEL, wrap, nil, 0, sr.SR_SUBSCR_APPLY_ONLY)
+    subscribe:module_change_subscribe(YANG_MODEL, wrap)
 
-    print("\n\n ========== STARTUP CONFIG APPLIED AS RUNNING ==========\n\n")
+    print("========== STARTUP CONFIG APPLIED AS RUNNING ==========")
 
     -- infinite loop
     sr.global_loop()
 
-    print("Clean startup datastore.\n\n")
+    print("Clean startup datastore.")
     clean_startup_datastore()
 
-    print("Application exit requested, exiting.\n\n")
-    return
+    print("Application exit requested, exiting.")
+    os.exit(0)
 end
-
-ok,res=pcall(run)
-if not ok then
-    print("\nerror: ",res, "\n")
-end
+ok,res=pcall(main) if not ok then print(res) end
