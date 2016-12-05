@@ -62,10 +62,6 @@ local function format(sysrepo_xpath, yang_model)
     local xpath = nil
     -- remove yang model from start
     xpath = "/" .. string.sub(sysrepo_xpath, string.len("/" .. yang_model .. ":") + 1)
-    -- remove softwire-config
-    if string.starts(xpath, "/softwire-config") then
-        xpath = string.sub(xpath, string.len("/softwire-config") + 1)
-    end
     -- remove ' from key
     xpath = xpath:gsub("='","=")
     xpath = xpath:gsub("']","]")
@@ -85,7 +81,10 @@ function new(action, xpath, value, id, yang)
 end
 
 function Snabb:send()
-    local COMMAND = path .. "../src/snabb config "..self.action.." "..self.id.." "..self.xpath.." '"..tostring(self.value .. "'")
+    local COMMAND = path .. "../src/snabb config "..self.action.." "..self.id.." "..self.xpath
+    if self.action == "set" then
+        COMMAND = COMMAND.." '"..tostring(self.value .. "'")
+    end
     local handle = io.popen(COMMAND)
     local result = handle:read("*a")
     print("COMMAND -> " .. COMMAND)
@@ -99,12 +98,10 @@ function Snabb:send()
 end
 
 
-local function fill_br_address(yang_model, id)
+local function fill_br_address(xpath, yang_model, id)
     local br_address = ""
     local conn_snabb = sr.Connection("application")
     local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_RUNNING)
-
-    local xpath ="/"..yang_model..":binding-table/br-address"
 
     local function sysrepo_call()
        local values = sess_snabb:get_items(xpath)
@@ -140,7 +137,6 @@ local function print_trees(trees)
     result = "{"
     for i = 0, trees:tree_cnt() -1, 1 do
         local tree = trees:tree(i)
-	print("tree_name -> " .. trees:tree(i):name())
         if trees:tree_cnt() == 1 then return print_value(trees:tre(i)) end
         if (print_value(tree) ~= nil) then
             result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
@@ -153,22 +149,25 @@ local function print_trees(trees)
     return result
 end
 
-local function fill_subtrees(yang_model, id, xpath, action)
+local function fill_subtrees(yang_model, id, xpath, action, count)
     local result = ""
     local conn_snabb = sr.Connection("application")
     local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_RUNNING)
 
-    if action == "delete" then return snabb.new(action, xpath, result, id, yang_model) end
-
-    if (xpath == "/snabb-softwire-v1:binding-table/br-address") then
-        return fill_br_address(yang_model, id)
+    if (xpath == "/snabb-softwire-v1:softwire-config/binding-table/br-address") then
+        return fill_br_address(xpath, yang_model, id)
     end
+
+    if action == "remove" then return snabb.new(action, xpath, result, id, yang_model) end
+
+    local session_xpath = xpath
+    if count > 1 then session_xpath = session_xpath .. "/*" end
 
     local function sysrepo_call()
 	    --todo check if not end leaf
-        local trees = sess_snabb:get_subtrees(xpath)
+        local trees = sess_snabb:get_subtrees(session_xpath)
         if trees == nil then return end
-        if trees:tree_cnt() == 1 then result = print_value(trees:tree(0)); return; end
+        if trees:tree_cnt() == 1 and count == 1 then result = print_value(trees:tree(0)); return; end
         result = print_trees(trees)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res); return nil end
@@ -177,11 +176,11 @@ local function fill_subtrees(yang_model, id, xpath, action)
     return snabb.new(action, xpath, result, id, yang_model)
 end
 
-function Action:set(xpath)
-    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "set"))
+function Action:set(xpath, yang_model, id, count)
+    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "set", count))
 end
 
-function Action:delete(xpath)
-    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "delete"))
+function Action:delete(xpath, yang_model, id, count)
+    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "remove", count))
 end
 

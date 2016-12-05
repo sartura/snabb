@@ -13,7 +13,6 @@ local sr = require("libsysrepoLua")
 local YANG_MODEL = nil
 local ID = nil
 
--- ################ debug functions ##########################
 local function print_r (t)
     local print_r_cache={}
     local function sub_print_r(t,indent)
@@ -48,15 +47,6 @@ local function print_r (t)
     print()
 end
 
-local function read_file(path)
-    local file = io.open(path, "rb") -- r read mode and b binary mode
-    if not file then return nil end
-    local content = file:read "*a" -- *a or *all reads the whole file
-    file:close()
-    return content
-end
--- ################ debug functions ##########################
-
 function string.starts(String,Start)
    return string.sub(String,1,string.len(Start))==Start
 end
@@ -89,13 +79,13 @@ end
 
 local function get_key_value(s, xpath)
     local keys = ""
-    if (xpath == "/binding-table/psid-map") then
+    if (xpath == "/softwire-config/binding-table/softwire/psid-map") then
         for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
             if (v["keyword"] == "addr") then
                 keys = "[addr='"..v["argument"].."']"
             end
         end end end
-    elseif (xpath == "/binding-table/softwire") then
+    elseif (xpath == "/softwire-config/binding-table/softwire") then
         local default_padding = nil
         for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
             if (v["keyword"] == "ipv4") then
@@ -136,15 +126,6 @@ local function contains(list, xpath)
 end
 
 local function send_to_sysrepo(sess_snabb, xpath, value)
-    -- hack for missing "binding-table"
-    -- replace 'internal-interface' with 'softwire-config/internal-interface'
-    if ("/internal-interface" == string.sub(xpath, 1, string.len("/internal-interface"))) then
-        xpath = "/softwire-config/internal-interface"..string.sub(xpath, string.len("/internal-interface") + 1)
-    -- replace 'internal-exterface' with 'softwire-config/external-interface'
-    elseif ("/external-interface" == string.sub(xpath, 1, string.len("/external-interface"))) then
-        xpath = "/softwire-config/external-interface"..string.sub(xpath, string.len("/external-interface") + 1)
-    end
-
     -- sysrepo expects format "/yang-model:container/..
     xpath = "/snabb-softwire-v1:" .. string.sub(xpath, 2)
     local function set()
@@ -204,10 +185,18 @@ local function clean_startup_datastore()
 
     -- clean datastore
     function clean()
-       sess_snabb:delete_item("/"..YANG_MODEL..":*")
-       sess_snabb:commit()
+        local values = sess_snabb:get_items("/"..YANG_MODEL..":*//*")
+        if values == nil then return end
+        for i=0, values:val_cnt() - 1, 1 do
+            if (values:val(i):xpath() == "/snabb-softwire-v1:softwire-config/binding-table") then
+                sess_snabb:delete_item(values:val(i):xpath())
+            end
+        end
+       
+        sess_snabb:commit()
     end
-    ok,res=pcall(clean) if not ok then end
+
+    ok,res=pcall(clean) if not ok then print(res) end
 end
 
 local function load_snabb_data()
@@ -215,21 +204,18 @@ local function load_snabb_data()
     local conn_snabb = sr.Connection("application")
     local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP)
 
-    -- local content
-    -- local COMMAND = "../src/snabb config get " .. ID .. ' "/"'
-    -- io.write("COMMAND: " .. COMMAND .. "\n")
-    -- local handle = io.popen(COMMAND)
-    -- local result = handle:read("*a")
-    -- if (result == "") then
-    --     print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-    --     print("|" .. result .. "|")
-    -- else
-    --     content = result
-    -- end
-    -- handle:close()
-
-    local filePath = "/opt/fork/snabb/sysrepo/lwaftr.conf"
-    local content = read_file(filePath)
+    local content
+    local COMMAND = "../src/snabb config get " .. ID .. ' "/"'
+    io.write("COMMAND: " .. COMMAND .. "\n")
+    local handle = io.popen(COMMAND)
+    local result = handle:read("*a")
+    if (result == "") then
+        print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
+        print("|" .. result .. "|")
+    else
+        content = result
+    end
+    handle:close()
 
     local parsed_data = yang.parse(content, nil)
     map_to_xpath(parsed_data, "", sess_snabb)
@@ -261,8 +247,9 @@ function module_change_cb(sess, module_name, event, private_ctx)
 
     local action_list = {}
     local delete_all = true
-    local  acc = {xpath = nil, action = nil, count = 0}
+    local acc = {xpath = nil, action = nil, count = 0}
 
+print("action -> " .. tostring(acc.action))
     local function sysrepo_call()
 	local change_path = "/" .. module_name .. ":*"
         local it = sess:get_changes_iter(change_path)
@@ -278,18 +265,18 @@ function module_change_cb(sess, module_name, event, private_ctx)
 	    if (op == sr.SR_OP_DELETED) then
                 if (acc.xpath == nil) then
                     acc.xpath = old:xpath()
-		    acc.action = "delete"
+		    acc.action = "remove"
 	        else
 		    local change = string.compare(old:xpath(), acc.xpath)
 		    if (change == old:xpath() and snabb.print_value(old) == nil and delete_all) then
                         acc.xpath = change
-                        acc.action = "delete"
+                        acc.action = "remove"
                     else
                         acc.xpath = change
                         acc.action = "set"
                     end
                 end
-	    elseif (op == sr.SR_OP_CREATED or op == sr.SR_OP_CREATED) then
+	    elseif (op == sr.SR_OP_CREATED or op == sr.SR_OP_MODIFIED) then
                 delete_all = false
 		acc.action = "set"
                 if (acc.xpath == nil) then
@@ -303,33 +290,26 @@ function module_change_cb(sess, module_name, event, private_ctx)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
-    local list_xpath = "/snabb-softwire-v1:binding-table"
+print("action -> " .. tostring(acc.action))
+    local list_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
     if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
-        acc.xpath = list_xpath .. "/*"
+        acc.xpath = list_xpath
 	acc.action = "set"
-    end
-
-    local list_xpath = "/snabb-softwire-v1:softwire-config"
-    if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
-        acc.xpath = list_xpath .."/*"
-	acc.action = "set"
-    end
-
-print("xpath -> " .. acc.xpath)
-    if acc.count > 1 then
-        acc.xpath = acc.xpath .. ""
     end
 
     local action_list = snabb.new_action(YANG_MODEL, ID)
-    if acc.action == "delete" then
-        action_list:delete(acc.xpath)
+    if acc.action == "remove" then
+        action_list:delete(acc.xpath, YANG_MODEL, ID, acc.count)
     elseif acc.action == "set" then
-        action_list:set(acc.xpath)
+        action_list:set(acc.xpath, YANG_MODEL, ID, acc.count)
     end
-    print_r(action_list)
 
+print_r(action_list)   
+    if (action_list[1]:send() == false) then
+        collectgarbage()
+        return tonumber(sr.SR_ERR_INTERNAL)
+    end
 
-    collectgarbage()
     return tonumber(sr.SR_ERR_OK)
 end
 
