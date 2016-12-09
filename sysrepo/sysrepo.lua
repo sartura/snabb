@@ -96,6 +96,7 @@ end
 local function send_to_sysrepo(sess_snabb, xpath, value)
     -- sysrepo expects format "/yang-model:container/..
     xpath = "/snabb-softwire-v1:" .. string.sub(xpath, 2)
+    print("XPATH ->" .. xpath)
     local function set()
         if contains(yang_keys, xpath) then
             -- skip yang keys, will generate sysrepo logs
@@ -147,48 +148,30 @@ local function map_to_xpath(s, path, sess_snabb)
     return
 end
 
-local function clean_startup_datastore()
-    local conn_snabb = sr.Connection("application")
-    local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP)
-
-    -- clean datastore
-    function clean()
-        local values = sess_snabb:get_items("/"..YANG_MODEL..":*//*")
-        if values == nil then return end
-        for i=0, values:val_cnt() - 1, 1 do
-            if (values:val(i):xpath() == "/snabb-softwire-v1:softwire-config/binding-table") then
-                sess_snabb:delete_item(values:val(i):xpath())
-            end
-        end
-        sess_snabb:commit()
-    end
-
-    ok,res=pcall(clean) if not ok then print(res) end
-end
-
 local function load_snabb_data()
-    clean_startup_datastore()
-    local conn_snabb = sr.Connection("application")
-    local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP)
+    local binding_table_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
+    local action_list = snabb.new_action(YANG_MODEL, ID)
+    action_list:set(binding_table_xpath, YANG_MODEL, ID, 2)
 
-    local content
-    local COMMAND = path.."../src/snabb config get " .. ID .. ' "/"'
-    local handle = io.popen(COMMAND)
-    local result = handle:read("*a")
-    if (result == "") then
-        print("COMMAND: " .. COMMAND)
-        print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-        print("|" .. result .. "|")
-    else
-        content = result
+    if action_list[1] ~= nil then
+        local status = action_list[1]:send()
     end
-    handle:close()
 
-    local parsed_data = yang.parse(content, nil)
-    map_to_xpath(parsed_data, "", sess_snabb)
+    local ex_interface_xpath = "/snabb-softwire-v1:softwire-config/external-interface/"
+    local action_list = snabb.new_action(YANG_MODEL, ID)
+    action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2)
 
-    print("========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========")
-    sess_snabb:commit()
+    if action_list[1] ~= nil then
+        local status = action_list[1]:send()
+    end
+
+    local in_interface_xpath = "/snabb-softwire-v1:softwire-config/internal-interface/"
+    local action_list = snabb.new_action(YANG_MODEL, ID)
+    action_list:set(in_interface_xpath, YANG_MODEL, ID, 2)
+
+    if action_list[1] ~= nil then
+        local status = action_list[1]:send()
+    end
     collectgarbage()
 end
 
@@ -291,22 +274,20 @@ function main()
     YANG_MODEL = params[1]
     ID = params[2]
 
-    -- load snabb startup data
-    load_snabb_data()
-
     conn = sr.Connection("application")
     sess = sr.Session(conn, sr.SR_DS_RUNNING)
     subscribe = sr.Subscribe(sess)
+
     wrap = sr.Callback_lua(module_change_cb)
     subscribe:module_change_subscribe(YANG_MODEL, wrap)
+
+    -- load snabb startup data
+    load_snabb_data()
 
     print("========== STARTUP CONFIG APPLIED AS RUNNING ==========")
 
     -- infinite loop
     sr.global_loop()
-
-    print("Clean startup datastore.")
-    clean_startup_datastore()
 
     print("Application exit requested, exiting.")
     os.exit(0)
