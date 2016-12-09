@@ -151,7 +151,7 @@ end
 local function load_snabb_data()
     local binding_table_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
     local action_list = snabb.new_action(YANG_MODEL, ID)
-    action_list:set(binding_table_xpath, YANG_MODEL, ID, 2)
+    action_list:set(binding_table_xpath, YANG_MODEL, ID, 2, sr.SR_DS_RUNNING)
 
     if action_list[1] ~= nil then
         local status = action_list[1]:send()
@@ -159,7 +159,7 @@ local function load_snabb_data()
 
     local ex_interface_xpath = "/snabb-softwire-v1:softwire-config/external-interface/"
     local action_list = snabb.new_action(YANG_MODEL, ID)
-    action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2)
+    action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_RUNNING)
 
     if action_list[1] ~= nil then
         local status = action_list[1]:send()
@@ -167,7 +167,7 @@ local function load_snabb_data()
 
     local in_interface_xpath = "/snabb-softwire-v1:softwire-config/internal-interface/"
     local action_list = snabb.new_action(YANG_MODEL, ID)
-    action_list:set(in_interface_xpath, YANG_MODEL, ID, 2)
+    action_list:set(in_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_RUNNING)
 
     if action_list[1] ~= nil then
         local status = action_list[1]:send()
@@ -249,9 +249,9 @@ function module_change_cb(sess, module_name, event, private_ctx)
 
     local action_list = snabb.new_action(YANG_MODEL, ID)
     if acc.action == "remove" then
-        action_list:delete(acc.xpath, YANG_MODEL, ID, acc.count)
+        action_list:delete(acc.xpath, YANG_MODEL, ID, acc.count, sr.SR_DS_RUNNING)
     elseif acc.action == "set" then
-        action_list:set(acc.xpath, YANG_MODEL, ID, acc.count)
+        action_list:set(acc.xpath, YANG_MODEL, ID, acc.count, sr.SR_DS_RUNNING)
     end
 
     if action_list[1] ~= nil then
