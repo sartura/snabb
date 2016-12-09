@@ -7,6 +7,10 @@ if arg and arg[0] then
     path = arg[0]:match("(.-)[^\\/]+$") .. ""
 end
 
+function string.ends(String,End)
+   return End=='' or string.sub(String,-string.len(End))==End
+end
+
 -- return string value representation
 function print_value(value)
    if (value:type() == sr.SR_CONTAINER_T) then
@@ -97,6 +101,9 @@ function Snabb:send()
     return true
 end
 
+function Snabb:print()
+    if self.value then return self.value else return "" end
+end
 
 local function fill_br_address(xpath, yang_model, id)
     local br_address = ""
@@ -164,10 +171,10 @@ local function print_trees(trees, xpath)
     return result
 end
 
-local function fill_subtrees(yang_model, id, xpath, action, count)
+local function fill_subtrees(yang_model, id, xpath, action, count, datastore)
     local result = ""
     local conn_snabb = sr.Connection("application")
-    local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_RUNNING)
+    local sess_snabb = sr.Session(conn_snabb, datastore)
 
     if (xpath == "/snabb-softwire-v1:softwire-config/binding-table/br-address") then
         return fill_br_address(xpath, yang_model, id)
@@ -191,11 +198,11 @@ local function fill_subtrees(yang_model, id, xpath, action, count)
     return snabb.new(action, xpath, result, id, yang_model)
 end
 
-function Action:set(xpath, yang_model, id, count)
-    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "set", count))
+function Action:set(xpath, yang_model, id, count, datastore)
+    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "set", count, datastore))
 end
 
 function Action:delete(xpath, yang_model, id, count)
-    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "remove", count))
+    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "remove", count, datastore))
 end
 
