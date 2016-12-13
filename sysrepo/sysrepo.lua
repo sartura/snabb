@@ -239,6 +239,16 @@ function module_change_cb(sess, module_name, event, private_ctx)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
+    -- commit changes to startup datastore
+    local function update_startup_datastore()
+        local start_conn = sr.Connection("application")
+        local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP)
+        start_sess:copy_config(YANG_MODEL, sr.SR_DS_RUNNING, sr.SR_DS_STARTUP)
+        start_sess:commit()
+    end
+    ok,res=pcall(update_startup_datastore) if not ok then print(res) end
+
+
     local list_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
     if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
         if not string.ends(acc.xpath, "/br-address") then
