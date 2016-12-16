@@ -96,7 +96,6 @@ end
 local function send_to_sysrepo(sess_snabb, xpath, value)
     -- sysrepo expects format "/yang-model:container/..
     xpath = "/snabb-softwire-v1:" .. string.sub(xpath, 2)
-    print("XPATH ->" .. xpath)
     local function set()
         if contains(yang_keys, xpath) then
             -- skip yang keys, will generate sysrepo logs
@@ -149,30 +148,73 @@ local function map_to_xpath(s, path, sess_snabb)
 end
 
 local function load_snabb_data()
-    local binding_table_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
-    local action_list = snabb.new_action(YANG_MODEL, ID)
-    action_list:set(binding_table_xpath, YANG_MODEL, ID, 2, sr.SR_DS_RUNNING)
+    local datastore_empty = false
 
-    if action_list[1] ~= nil then
-        local status = action_list[1]:send()
+    local function sysrepo_call()
+        local conn = sr.Connection("application")
+        local sess = sr.Session(conn, sr.SR_DS_STARTUP)
+        local values = nil
+        local xpath = "/" .. YANG_MODEL .. ":*//*"
+        values = sess:get_items(xpath)
+
+	if (values == nil) then
+            datastore_empty = true
+        else
+            datastore_empty = false
+	end
     end
+    ok,res=pcall(sysrepo_call) if not ok then datastore_empty = true end
 
-    local ex_interface_xpath = "/snabb-softwire-v1:softwire-config/external-interface/"
-    local action_list = snabb.new_action(YANG_MODEL, ID)
-    action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_RUNNING)
+    if datastore_empty then
+        local conn_snabb = sr.Connection("application")
+        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP)
 
-    if action_list[1] ~= nil then
-        local status = action_list[1]:send()
+        local content
+        local COMMAND = path.."../src/snabb config get " .. ID .. ' "/"'
+        local handle = io.popen(COMMAND)
+        local result = handle:read("*a")
+        if (result == "") then
+            print("COMMAND: " .. COMMAND)
+            print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
+            print("|" .. result .. "|")
+        else
+            content = result
+        end
+        handle:close()
+
+        local parsed_data = yang.parse(content, nil)
+        map_to_xpath(parsed_data, "", sess_snabb)
+
+        print("========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========")
+        sess_snabb:commit()
+        collectgarbage()
+    else
+        local binding_table_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
+        local action_list = snabb.new_action(YANG_MODEL, ID)
+        action_list:set(binding_table_xpath, YANG_MODEL, ID, 2, sr.SR_DS_STARTUP)
+
+        if action_list[1] ~= nil then
+            local status = action_list[1]:send()
+        end
+
+        local ex_interface_xpath = "/snabb-softwire-v1:softwire-config/external-interface/"
+        local action_list = snabb.new_action(YANG_MODEL, ID)
+        action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_STARTUP)
+
+        if action_list[1] ~= nil then
+            local status = action_list[1]:send()
+        end
+
+        local in_interface_xpath = "/snabb-softwire-v1:softwire-config/internal-interface/"
+        local action_list = snabb.new_action(YANG_MODEL, ID)
+        action_list:set(in_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_STARTUP)
+
+        if action_list[1] ~= nil then
+            local status = action_list[1]:send()
+        end
+        print("========== COMMIT SYSREPO CONFIG DATA TO SNABB: ==========")
+        collectgarbage()
     end
-
-    local in_interface_xpath = "/snabb-softwire-v1:softwire-config/internal-interface/"
-    local action_list = snabb.new_action(YANG_MODEL, ID)
-    action_list:set(in_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_RUNNING)
-
-    if action_list[1] ~= nil then
-        local status = action_list[1]:send()
-    end
-    collectgarbage()
 end
 
 -- Function to print current configuration state.
@@ -284,15 +326,15 @@ function main()
     YANG_MODEL = params[1]
     ID = params[2]
 
+    -- load snabb startup data
+    load_snabb_data()
+
     conn = sr.Connection("application")
     sess = sr.Session(conn, sr.SR_DS_RUNNING)
     subscribe = sr.Subscribe(sess)
 
     wrap = sr.Callback_lua(module_change_cb)
     subscribe:module_change_subscribe(YANG_MODEL, wrap)
-
-    -- load snabb startup data
-    load_snabb_data()
 
     print("========== STARTUP CONFIG APPLIED AS RUNNING ==========")
 
