@@ -330,7 +330,7 @@ function main()
     load_snabb_data()
 
     conn = sr.Connection("application")
-    sess = sr.Session(conn, sr.SR_DS_RUNNING)
+    sess = sr.Session(conn, sr.SR_DS_RUNNING, sr.SR_SESS_DEFAULT, "netconf")
     subscribe = sr.Subscribe(sess)
 
     wrap = sr.Callback_lua(module_change_cb)
