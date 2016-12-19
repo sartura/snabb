@@ -152,7 +152,7 @@ local function load_snabb_data()
 
     local function sysrepo_call()
         local conn = sr.Connection("application")
-        local sess = sr.Session(conn, sr.SR_DS_STARTUP)
+        local sess = sr.Session(conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
         local values = nil
         local xpath = "/" .. YANG_MODEL .. ":*//*"
         values = sess:get_items(xpath)
@@ -167,7 +167,7 @@ local function load_snabb_data()
 
     if datastore_empty then
         local conn_snabb = sr.Connection("application")
-        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP)
+        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
 
         local content
         local COMMAND = path.."../src/snabb config get " .. ID .. ' "/"'
@@ -284,7 +284,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
     -- commit changes to startup datastore
     local function update_startup_datastore()
         local start_conn = sr.Connection("application")
-        local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP)
+        local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
         start_sess:copy_config(YANG_MODEL, sr.SR_DS_RUNNING, sr.SR_DS_STARTUP)
         start_sess:commit()
     end
