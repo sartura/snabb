@@ -108,7 +108,7 @@ end
 local function fill_br_address(xpath, yang_model, id)
     local br_address = ""
     local conn_snabb = sr.Connection("application")
-    local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_RUNNING)
+    local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_RUNNING, sr.SR_SESS_DEFAULT, "netconf")
 
     local function sysrepo_call()
        local values = sess_snabb:get_items(xpath)
@@ -174,7 +174,7 @@ end
 local function fill_subtrees(yang_model, id, xpath, action, count, datastore)
     local result = ""
     local conn_snabb = sr.Connection("application")
-    local sess_snabb = sr.Session(conn_snabb, datastore)
+    local sess_snabb = sr.Session(conn_snabb, datastore, sr.SR_SESS_DEFAULT, "netconf")
 
     if (xpath == "/snabb-softwire-v1:softwire-config/binding-table/br-address") then
         return fill_br_address(xpath, yang_model, id)
