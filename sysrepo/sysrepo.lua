@@ -189,9 +189,12 @@ local function load_snabb_data()
         sess_snabb:commit()
         collectgarbage()
     else
-        local binding_table_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
+        local conn_snabb = sr.Connection("application")
+        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
+
+	local binding_table_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
         local action_list = snabb.new_action(YANG_MODEL, ID)
-        action_list:set(binding_table_xpath, YANG_MODEL, ID, 2, sr.SR_DS_STARTUP)
+        action_list:set(binding_table_xpath, YANG_MODEL, ID, 2, sess_snabb)
 
         if action_list[1] ~= nil then
             local status = action_list[1]:send()
@@ -199,7 +202,7 @@ local function load_snabb_data()
 
         local ex_interface_xpath = "/snabb-softwire-v1:softwire-config/external-interface/"
         local action_list = snabb.new_action(YANG_MODEL, ID)
-        action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_STARTUP)
+        action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2, sess_snabb)
 
         if action_list[1] ~= nil then
             local status = action_list[1]:send()
@@ -207,7 +210,7 @@ local function load_snabb_data()
 
         local in_interface_xpath = "/snabb-softwire-v1:softwire-config/internal-interface/"
         local action_list = snabb.new_action(YANG_MODEL, ID)
-        action_list:set(in_interface_xpath, YANG_MODEL, ID, 2, sr.SR_DS_STARTUP)
+        action_list:set(in_interface_xpath, YANG_MODEL, ID, 2, sess_snabb)
 
         if action_list[1] ~= nil then
             local status = action_list[1]:send()
@@ -235,7 +238,18 @@ end
 
 -- Function to be called for subscribed client of given session whenever configuration changes.
 function module_change_cb(sess, module_name, event, private_ctx)
-    if (event ~= sr.SR_EV_APPLY) then return tonumber(sr.SR_ERR_OK) end
+    if (event == sr.SR_EV_APPLY) then
+        -- commit changes to startup datastore
+        local function update_startup_datastore()
+            local start_conn = sr.Connection("application")
+            local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
+            start_sess:copy_config(YANG_MODEL, sr.SR_DS_RUNNING, sr.SR_DS_STARTUP)
+            start_sess:commit()
+        end
+        ok,res=pcall(update_startup_datastore) if not ok then print(res) end
+
+        return tonumber(sr.SR_ERR_OK)
+    end
 
     local action_list = {}
     local delete_all = true
@@ -281,16 +295,6 @@ function module_change_cb(sess, module_name, event, private_ctx)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
-    -- commit changes to startup datastore
-    local function update_startup_datastore()
-        local start_conn = sr.Connection("application")
-        local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
-        start_sess:copy_config(YANG_MODEL, sr.SR_DS_RUNNING, sr.SR_DS_STARTUP)
-        start_sess:commit()
-    end
-    ok,res=pcall(update_startup_datastore) if not ok then print(res) end
-
-
     local list_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
     if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
         if not string.ends(acc.xpath, "/br-address") then
@@ -301,9 +305,9 @@ function module_change_cb(sess, module_name, event, private_ctx)
 
     local action_list = snabb.new_action(YANG_MODEL, ID)
     if acc.action == "remove" then
-        action_list:delete(acc.xpath, YANG_MODEL, ID, acc.count, sr.SR_DS_RUNNING)
+        action_list:delete(acc.xpath, YANG_MODEL, ID, acc.count, sess)
     elseif acc.action == "set" then
-        action_list:set(acc.xpath, YANG_MODEL, ID, acc.count, sr.SR_DS_RUNNING)
+        action_list:set(acc.xpath, YANG_MODEL, ID, acc.count, sess)
     end
 
     if action_list[1] ~= nil then
