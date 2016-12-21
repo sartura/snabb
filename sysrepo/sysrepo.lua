@@ -15,9 +15,6 @@ local sr = require("libsysrepoLua")
 local YANG_MODEL = nil
 local ID = nil
 
-function string.starts(String,Start)
-   return string.sub(String,1,string.len(Start))==Start
-end
 function string.ends(String,End)
    return End=='' or string.sub(String,-string.len(End))==End
 end
@@ -32,18 +29,6 @@ function string.compare(First, Second)
     end
     return string.sub(First,1,match)
 end
-
-function string.compare_xpath(First, Second)
-    if (First == nil or Second == nil) then return nil end
-    local match = 0
-    for i = 1, string.len(First) do
-        if (i > string.len(Second)) then break end
-        if (string.sub(First,i,i) ~= string.sub(Second,i,i)) then break end
-	match = i
-    end
-    return string.sub(First,1,match)
-end
-
 
 local function get_key_value(s, xpath)
     local keys = ""
@@ -79,49 +64,17 @@ local function get_key_value(s, xpath)
     return keys
 end
 
-local yang_string = {"/ip", "/addr", "/end-addr", "/br-address", "/b4-ipv6", "/ingress-filter", "/egress-filter", "/mac"}
-local yang_uint8 = {"/psid-length", "/shift", "/reserved-ports-bit-count"}
-local yang_uint16 = {"/psid", "/padding", "/vlan-tag", "/mtu"}
-local yang_uint32 = {"/period", "/max-fragments-per-packet", "/max-packets", "/br", "/packets"}
-local yang_bool = {"/allow-incoming-icmp", "/generate-icmp-errors", "/hairpinning"}
-local yang_keys = {"/psid", "/addr"}
-
-local function contains(list, xpath)
-    for key, value in pairs(list) do
-        if string.ends(xpath, value) then return true end
-    end
-    return false
-end
-
 local function send_to_sysrepo(sess_snabb, xpath, value)
     -- sysrepo expects format "/yang-model:container/..
     xpath = "/snabb-softwire-v1:" .. string.sub(xpath, 2)
     local function set()
-        if contains(yang_keys, xpath) then
-            -- skip yang keys, will generate sysrepo logs
-        elseif contains(yang_string, xpath) then
-            local val = sr.Val(value, sr.SR_STRING_T)
-            sess_snabb:set_item(xpath, val)
-        elseif contains(yang_uint8, xpath) then
-            local val = sr.Val(tonumber(value), sr.SR_UINT8_T)
-            sess_snabb:set_item(xpath, val)
-        elseif contains(yang_uint16, xpath) then
-            local val = sr.Val(tonumber(value), sr.SR_UINT16_T)
-            sess_snabb:set_item(xpath, val)
-        elseif contains(yang_uint32, xpath) then
-            local val = sr.Val(tonumber(value), sr.SR_UINT32_T)
-            sess_snabb:set_item(xpath, val)
-        elseif contains(yang_bool, xpath) then
-           if (value == "true") then
-               local val = sr.Val(true, sr.SR_BOOL_T)
-               sess_snabb:set_item(xpath, val)
-           elseif (value == "false") then
-               local val = sr.Val(false, sr.SR_BOOL_T)
-               sess_snabb:set_item(xpath, val)
-           end
-        end
+        sess_snabb:set_item_str(xpath, value)
     end
-    ok,res=pcall(set) if not ok then print(res) end
+    ok,res=pcall(set)
+    if not ok then
+        -- set_item_str will fail for key elements
+        -- print(res)
+    end
 end
 
 local function map_to_xpath(s, path, sess_snabb)
