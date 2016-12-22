@@ -66,7 +66,7 @@ end
 
 local function send_to_sysrepo(sess_snabb, xpath, value)
     -- sysrepo expects format "/yang-model:container/..
-    xpath = "/snabb-softwire-v1:" .. string.sub(xpath, 2)
+    xpath = "/"..YANG_MODEL..":" .. string.sub(xpath, 2)
     local function set()
         sess_snabb:set_item_str(xpath, value)
     end
@@ -103,7 +103,7 @@ end
 local function map_to_oper(s, path, oper_list)
     local ts = type(s)
     if (ts ~= "table") then
-        xpath = "/snabb-softwire-v1:" .. string.sub(path, 2)
+        xpath = "/"..YANG_MODEL..":" .. string.sub(path, 2)
 	oper_list[#oper_list + 1] = {xpath, s}
     return end
     for k,v in pairs(s) do
@@ -152,24 +152,25 @@ local function load_snabb_data()
         local result = handle:read("*a")
         if (result == "") then
             print("COMMAND: " .. COMMAND)
-            print("\nERROR message from snabb config.\nCOMMAND: " .. COMMAND)
-            print("|" .. result .. "|")
         else
             content = result
         end
         handle:close()
 
-        local parsed_data = yang.parse(content, nil)
-        map_to_xpath(parsed_data, "", sess_snabb)
+        local function sysrepo_call()
+            local parsed_data = yang.parse(content, nil)
+            map_to_xpath(parsed_data, "", sess_snabb)
 
-        print("========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========")
-        sess_snabb:commit()
-        collectgarbage()
+            print("========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========")
+            sess_snabb:commit()
+            collectgarbage()
+        end
+        ok,res=pcall(sysrepo_call) if not ok then datastore_empty = true end
     else
         local conn_snabb = sr.Connection("application")
         local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
 
-	local binding_table_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
+	local binding_table_xpath = "/"..YANG_MODEL..":softwire-config/binding-table"
         local action_list = snabb.new_action(YANG_MODEL, ID)
         action_list:set(binding_table_xpath, YANG_MODEL, ID, 2, sess_snabb)
 
@@ -177,7 +178,7 @@ local function load_snabb_data()
             local status = action_list[1]:send()
         end
 
-        local ex_interface_xpath = "/snabb-softwire-v1:softwire-config/external-interface/"
+        local ex_interface_xpath = "/"..YANG_MODEL..":softwire-config/external-interface/"
         local action_list = snabb.new_action(YANG_MODEL, ID)
         action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2, sess_snabb)
 
@@ -185,7 +186,7 @@ local function load_snabb_data()
             local status = action_list[1]:send()
         end
 
-        local in_interface_xpath = "/snabb-softwire-v1:softwire-config/internal-interface/"
+        local in_interface_xpath = "/"..YANG_MODEL..":softwire-config/internal-interface/"
         local action_list = snabb.new_action(YANG_MODEL, ID)
         action_list:set(in_interface_xpath, YANG_MODEL, ID, 2, sess_snabb)
 
@@ -195,22 +196,6 @@ local function load_snabb_data()
         print("========== COMMIT SYSREPO CONFIG DATA TO SNABB: ==========")
         collectgarbage()
     end
-end
-
--- Function to print current configuration state.
--- It does so by loading all the items of a session and printing them out.
-local function print_current_config(sess, module_name)
-
-    local function sysrepo_call()
-        xpath = "/" .. module_name .. ":*//*"
-        values = sess:get_items(xpath)
-
-	if (values == nil) then return end
-	for i=0, values:val_cnt() - 1, 1 do
-            io.write(values:val(i):to_string())
-	end
-    end
-    ok,res=pcall(sysrepo_call) if not ok then print(res) end
 end
 
 -- Function to be called for subscribed client of given session whenever configuration changes.
@@ -272,7 +257,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
-    local list_xpath = "/snabb-softwire-v1:softwire-config/binding-table"
+    local list_xpath = "/"..YANG_MODEL..":softwire-config/binding-table"
     if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
         if not string.ends(acc.xpath, "/br-address") then
             acc.xpath = list_xpath
@@ -352,7 +337,7 @@ function main()
     print("========== STARTUP CONFIG APPLIED AS RUNNING ==========")
 
     wrap_oper = sr.Callback_lua(dp_get_items_cb)
-    subscribe:dp_get_items_subscribe("/snabb-softwire-v1:softwire-state", wrap_oper)
+    subscribe:dp_get_items_subscribe("/"..YANG_MODEL..":softwire-state", wrap_oper)
 
     print("========== SUBSCRIBE TO OPERATIONAL DATA ==========")
 
