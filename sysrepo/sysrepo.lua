@@ -100,6 +100,30 @@ local function map_to_xpath(s, path, sess_snabb)
     return
 end
 
+local function map_to_oper(s, path, oper_list)
+    local ts = type(s)
+    if (ts ~= "table") then
+        xpath = "/snabb-softwire-v1:" .. string.sub(path, 2)
+	oper_list[#oper_list + 1] = {xpath, s}
+    return end
+    for k,v in pairs(s) do
+	if (k == "keyword") then
+	elseif (k == "keyword" or k == "loc" or type(k) == "number") then
+            map_to_oper(v, path, oper_list)
+	elseif (k == "statements") then
+            local xpath = path.."/"..tostring(s["keyword"])
+            map_to_oper(v, xpath, oper_list)
+	elseif (k == "argument") then
+            local xpath = path.."/"..tostring(s["keyword"])
+            map_to_oper(v, xpath, oper_list)
+	else
+            local xpath = path.."/"..tostring(s["keyword"])
+            map_to_oper(v, xpath, oper_list)
+        end
+    end
+    return
+end
+
 local function load_snabb_data()
     local datastore_empty = false
 
@@ -274,6 +298,38 @@ function module_change_cb(sess, module_name, event, private_ctx)
     return tonumber(sr.SR_ERR_OK)
 end
 
+-- Function to be called for operational data
+function dp_get_items_cb(xpath, val_holder, private_ctx)
+
+    local snabb_state
+    local COMMAND = path.."../src/snabb config get-state " .. ID .. ' "/"'
+    local handle = io.popen(COMMAND)
+    local result = handle:read("*a")
+    if (result == "") then
+        print("COMMAND: " .. COMMAND)
+        return tonumber(sr.SR_ERR_INTERNAL)
+    else
+        snabb_state = result
+    end
+    handle:close()
+
+    function oper_snabb_to_sysrepo()
+	local oper_list = {}
+        local parsed_data = yang.parse(snabb_state, nil)
+        map_to_oper(parsed_data, "", oper_list)
+
+	vals = val_holder:allocate(#oper_list)
+
+	for i, oper in ipairs(oper_list) do
+            vals:val(i-1):set(oper[1], tonumber(oper[2]), sr.SR_UINT64_T)
+        end
+        collectgarbage()
+    end
+    ok,res=pcall(oper_snabb_to_sysrepo) if not ok then print(res) end
+
+    return tonumber(sr.SR_ERR_OK)
+end
+
 -- Main client function.
 function main()
     if (params[1] == nil and params[2] == nil) then
@@ -294,6 +350,11 @@ function main()
     subscribe:module_change_subscribe(YANG_MODEL, wrap)
 
     print("========== STARTUP CONFIG APPLIED AS RUNNING ==========")
+
+    wrap_oper = sr.Callback_lua(dp_get_items_cb)
+    subscribe:dp_get_items_subscribe("/snabb-softwire-v1:softwire-state", wrap_oper)
+
+    print("========== SUBSCRIBE TO OPERATIONAL DATA ==========")
 
     -- infinite loop
     sr.global_loop()
