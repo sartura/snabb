@@ -161,6 +161,7 @@ local function fill_subtrees(yang_model, id, xpath, action, count, sess)
 
     if (xpath == "/snabb-softwire-v1:softwire-config/binding-table/br-address") then
         xpath = "/snabb-softwire-v1:softwire-config/binding-table"
+	count = 2
     end
 
     if action == "remove" then return snabb.new(action, xpath, result, id, yang_model) end
