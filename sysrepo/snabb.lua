@@ -108,22 +108,6 @@ function Snabb:print()
     if self.value then return self.value else return "" end
 end
 
-local function fill_br_address(xpath, yang_model, id, sess)
-    local br_address = ""
-
-    local function sysrepo_call()
-       local values = sess:get_items(xpath)
-       if values == nil then return end
-       for i = 0, values:val_cnt() -1, 1 do
-           br_address = br_address .. " " .. print_value(values:val(i))
-       end
-    end
-    ok,res=pcall(sysrepo_call) if not ok then print(res); return nil end
-
-    collectgarbage()
-    return snabb.new("set", xpath, br_address, id, yang_model)
-end
-
 local function print_trees(trees, xpath)
     local result = ""
 
