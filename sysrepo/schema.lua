@@ -1,3 +1,5 @@
+module(..., package.seeall)
+
 local require_rel
 local path = ""
 if arg and arg[0] then
@@ -65,13 +67,8 @@ function new_schema_ctx(yang_model)
     setmetatable({}, Yang)
     local yang_path = path.."../src/lib/yang/"..yang_model..".yang"
     local parsed_yang = yang.parse_file(yang_path)
+    if parsed_yang == nil then return nil end
     Yang.schema = parsed_yang
     return Yang
 end
-
-local xpath = "/snabb-softwire-v1:softwire-config/external-interface/next-hop/ip"
-local xpath = "/snabb-softwire-v1:softwire-config/binding-table/br-address"
-local yang_schema = new_schema_ctx("snabb-softwire-v1")
-local ret = yang_schema:get_type(xpath)
-print("RET -> " .. ret)
 

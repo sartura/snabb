@@ -2,6 +2,15 @@ module(..., package.seeall)
 
 local sr = require("libsysrepoLua")
 
+local require_rel
+local path = ""
+if arg and arg[0] then
+    package.path = arg[0]:match("(.-)[^\\/]+$") .. "?.lua;" .. package.path
+    require_rel = require
+    path = arg[0]:match("(.-)[^\\/]+$") .. ""
+end
+
+local schema = require_rel('schema')
 local path = ""
 if arg and arg[0] then
     path = arg[0]:match("(.-)[^\\/]+$") .. ""
@@ -50,15 +59,8 @@ function print_value(value)
    end
 end
 
-local Action = {yang_model = nil, id = nil}
+local Action = {yang_model = nil, id = nil, yang_schema = nil}
 Action.__index = table
-
-function new_action(yang_model, id)
-    setmetatable({}, Action)
-    Action.yang_model = yang_model
-    Action.id = id
-    return Action
-end
 
 local Snabb = {action = nil, xpath = nil, value = nil, id=nil, yang=nil}
 
@@ -72,9 +74,9 @@ local function format(sysrepo_xpath, yang_model)
     return xpath
 end
 
--- Used to initialize Animal objects
+-- Used to initialize Snabb objects
 function new(action, xpath, value, id, yang)
-    setmetatable({}, Snabb)
+    local Snabb = {}
     -- Self is a reference to values for this Animal
     Snabb.action = action
     Snabb.xpath = format(xpath, yang)
@@ -84,13 +86,13 @@ function new(action, xpath, value, id, yang)
     return Snabb
 end
 
-function Snabb:send()
-    local COMMAND = path .. "../src/snabb config "..self.action.." "..self.id.." "..self.xpath
-    if self.action == "set" then
-        if self.value == nil then
+local function send(Snabb)
+    local COMMAND = path .. "../src/snabb config "..Snabb.action.." "..Snabb.id.." "..Snabb.xpath
+    if Snabb.action == "set" then
+        if Snabb.value == nil then
             return false
         end
-        COMMAND = COMMAND.." '"..tostring(self.value) .. "'"
+        COMMAND = COMMAND.." '"..tostring(Snabb.value) .. "'"
     end
     local handle = io.popen(COMMAND)
     local result = handle:read("*a")
@@ -104,11 +106,7 @@ function Snabb:send()
     return true
 end
 
-function Snabb:print()
-    if self.value then return self.value else return "" end
-end
-
-local function print_trees(trees, xpath)
+local function print_trees(trees, xpath, yang_schema)
     local result = ""
 
     local function sub_tree_length(tree)
@@ -126,55 +124,56 @@ local function print_trees(trees, xpath)
         local result = ""
         if (tree == nil) then return count end
         while true do
-            if tree == nil then break end
-            result = result .. " " .. tree:name() .. " " .. print_value(tree) .. ";"
+            if tree == nil then break
+            elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
+                result = result.." "..tree:name().." { "..print_list(tree:first_child()).."}"
+            else
+                result = result .. " " .. tree:name() .. " " .. print_value(tree) .. ";"
+            end
             tree = tree:next()
         end
         return result
     end
 
-    if string.ends(xpath, "]") or string.ends(xpath, "/softwire") or string.ends(xpath, "psid-map") then result = result .. "{" end
-    local count = 0
+    local yang_type = yang_schema:get_type(xpath)
+    if yang_type == "list" or yang_type == "grouping" then result = result .. "{" end
+
     for i = 0, trees:tree_cnt() -1, 1 do
         local tree = trees:tree(i)
-        if count > 0 then
-            count = count - 1
-            if (count == 0) then result = result .. "}"; count = count - 1 end
-        end
         if trees:tree_cnt() == 1 then return print_value(trees:tree(i)) end
         if (print_value(tree) ~= nil) then
             result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
-        elseif tree:type() == sr.SR_LIST_T then
+        elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
             result = result.." "..tree:name().." { "..print_list(tree:first_child()).."}"
         else
-            count = sub_tree_length(tree:first_child()) + 1
-            result = result .. " " .. tree:name() .." {"
+            result = result .. " " .. tree:name() ..""
         end
     end
-    if string.ends(xpath, "]") or string.ends(xpath, "softwire") or string.ends(xpath, "psid-map") then result = result .. "}" end
+    if yang_type == "list" or yang_type == "grouping" then result = result .. "}" end
 
     return result
 end
 
-local function fill_subtrees(yang_model, id, xpath, action, count, sess)
+local function fill_subtrees(yang_model, id, yang_schema, xpath, action, sess)
     local result = ""
 
+    --TODO skip problem in snabb of setting a leaf-list directly
     if (xpath == "/snabb-softwire-v1:softwire-config/binding-table/br-address") then
         xpath = "/snabb-softwire-v1:softwire-config/binding-table"
-	count = 2
     end
 
     if action == "remove" then return snabb.new(action, xpath, result, id, yang_model) end
 
     local session_xpath = xpath
-    if count > 1 then session_xpath = session_xpath .. "/*" end
+    local yang_type = yang_schema:get_type(xpath)
+    if yang_type == "container" or yang_type == "list" then session_xpath = session_xpath .. "/*" end
 
     local function sysrepo_call()
 	    --todo check if not end leaf
         local trees = sess:get_subtrees(session_xpath)
         if trees == nil then return end
-        if trees:tree_cnt() == 1 and count == 1 and trees:tree(0):first_child() == nil then result = print_value(trees:tree(0)); return; end
-        result = print_trees(trees, xpath)
+        if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then result = print_value(trees:tree(0)); return; end
+        result = print_trees(trees, xpath, yang_schema)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res); return nil end
 
@@ -182,11 +181,39 @@ local function fill_subtrees(yang_model, id, xpath, action, count, sess)
     return snabb.new(action, xpath, result, id, yang_model)
 end
 
-function Action:set(xpath, yang_model, id, count, sess)
-    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "set", count, sess))
+function Action:set(xpath, sess)
+    local data = fill_subtrees(self.yang_model, self.id, self.yang_schema, xpath, "set", sess)
+    self.action_list[#self.action_list + 1] = data
 end
 
-function Action:delete(xpath, yang_model, id, count, sess)
-    table.insert(self, fill_subtrees(self.yang_model, self.id, xpath, "remove", count, sess))
+function Action:delete(xpath, sess)
+    local data = fill_subtrees(self.yang_model, self.id, self.yang_schema, xpath, "remove", sess)
+    self.action_list[#self.action_list + 1] = data
 end
+
+function Action:run()
+    for i=#self.action_list,1,-1 do
+        local sucess = send(self.action_list[i])
+        if not sucess then
+            self.failed_list[#self.failed_list + 1] = self.action_list[i]
+        end
+        table.remove(self.action_list, i)
+    end
+end
+
+
+function new_ctx(yang_model, id)
+    setmetatable({}, Action)
+    Action.yang_model = yang_model
+    Action.id = id
+    Action.action_list = {}
+    Action.failed_list = {}
+
+    local yang_schema = schema.new_schema_ctx(yang_model)
+    if yang_schema == nil then return nil end
+
+    Action.yang_schema = yang_schema
+    return Action
+end
+
 

@@ -12,8 +12,7 @@ local snabb = require_rel('snabb')
 
 local sr = require("libsysrepoLua")
 
-local YANG_MODEL = nil
-local ID = nil
+local action = nil
 
 function string.ends(String,End)
    return End=='' or string.sub(String,-string.len(End))==End
@@ -170,29 +169,11 @@ local function load_snabb_data()
         local conn_snabb = sr.Connection("application")
         local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
 
-	local binding_table_xpath = "/"..YANG_MODEL..":softwire-config/binding-table"
-        local action_list = snabb.new_action(YANG_MODEL, ID)
-        action_list:set(binding_table_xpath, YANG_MODEL, ID, 2, sess_snabb)
+	local binding_table_xpath = "/"..YANG_MODEL..":softwire-config"
+        action:set(binding_table_xpath, sess_snabb)
 
-        if action_list[1] ~= nil then
-            local status = action_list[1]:send()
-        end
+	action:run()
 
-        local ex_interface_xpath = "/"..YANG_MODEL..":softwire-config/external-interface/"
-        local action_list = snabb.new_action(YANG_MODEL, ID)
-        action_list:set(ex_interface_xpath, YANG_MODEL, ID, 2, sess_snabb)
-
-        if action_list[1] ~= nil then
-            local status = action_list[1]:send()
-        end
-
-        local in_interface_xpath = "/"..YANG_MODEL..":softwire-config/internal-interface/"
-        local action_list = snabb.new_action(YANG_MODEL, ID)
-        action_list:set(in_interface_xpath, YANG_MODEL, ID, 2, sess_snabb)
-
-        if action_list[1] ~= nil then
-            local status = action_list[1]:send()
-        end
         print("========== COMMIT SYSREPO CONFIG DATA TO SNABB: ==========")
         collectgarbage()
     end
@@ -213,7 +194,6 @@ function module_change_cb(sess, module_name, event, private_ctx)
         return tonumber(sr.SR_ERR_OK)
     end
 
-    local action_list = {}
     local delete_all = true
     local acc = {xpath = nil, action = nil, count = 0}
 
@@ -265,20 +245,20 @@ function module_change_cb(sess, module_name, event, private_ctx)
 	acc.action = "set"
     end
 
-    local action_list = snabb.new_action(YANG_MODEL, ID)
     if acc.action == "remove" then
-        action_list:delete(acc.xpath, YANG_MODEL, ID, acc.count, sess)
+        action:delete(acc.xpath, YANG_MODEL, ID, acc.count, sess)
     elseif acc.action == "set" then
-        action_list:set(acc.xpath, YANG_MODEL, ID, acc.count, sess)
+        action:set(acc.xpath, YANG_MODEL, ID, acc.count, sess)
     end
 
-    if action_list[1] ~= nil then
-        local status = action_list[1]:send()
-        if not status then
-            collectgarbage()
-            return tonumber(sr.SR_ERR_INTERNAL)
-        end
-    end
+    action:run()
+    --if action[1] ~= nil then
+    --    local status = action[1]:send()
+    --    if not status then
+    --        collectgarbage()
+    --        return tonumber(sr.SR_ERR_INTERNAL)
+    --    end
+    --end
 
     return tonumber(sr.SR_ERR_OK)
 end
@@ -323,6 +303,9 @@ function main()
     end
     YANG_MODEL = params[1]
     ID = params[2]
+
+    action = snabb.new_ctx(YANG_MODEL, ID)
+    if action == nil then print("can not find yang model in snabb"); os.exit(0) end
 
     -- load snabb startup data
     load_snabb_data()
