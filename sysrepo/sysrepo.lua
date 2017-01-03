@@ -18,6 +18,13 @@ function string.ends(String,End)
    return End=='' or string.sub(String,-string.len(End))==End
 end
 
+local function contains(list, el)
+    for key, value in pairs(list) do
+        if el == value then return true end
+    end
+    return false
+end
+
 function string.compare(First, Second)
     if (First == nil or Second == nil) then return nil end
     local match = 0
@@ -30,37 +37,20 @@ function string.compare(First, Second)
 end
 
 local function get_key_value(s, xpath)
-    local keys = ""
-    if (xpath == "/softwire-config/binding-table/psid-map") then
+    local result = ""
+    local yang_type = action.yang_schema:get_type(xpath)
+
+    if yang_type == "list" then
+        local keys = action.yang_schema:get_keys(xpath)
+        if keys == nil then return result end
+
         for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
-            if (v["keyword"] == "addr") then
-                keys = "[addr='"..v["argument"].."']"
+            if contains(keys, v["keyword"]) then
+                result = result .. "[" .. v["keyword"] .. "='"..v["argument"].."']"
             end
         end end end
-    elseif (xpath == "/softwire-config/binding-table/softwire") then
-        local default_padding = nil
-        for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
-            if (v["keyword"] == "ipv4") then
-                keys = keys.."[ipv4='"..v["argument"].."']"
-            end
-        end end end
-        for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
-            if (v["keyword"] == "psid") then
-                keys = keys.."[psid='"..v["argument"].."']"
-            end
-        end end end
-        for k1,v1 in pairs(s) do
-            if (type(v1) == "table") then for k,v in pairs(v1) do if (v["keyword"] == "padding") then
-            default_padding = v["argument"]
-                keys = keys.."[padding='"..v["argument"].."']"
-            end
-        end end end
-        if (default_padding == nil) then
-            keys = keys.."[padding='0']"
-            --TODO add padding
-        end
     end
-    return keys
+    return result
 end
 
 local function send_to_sysrepo(sess_snabb, xpath, value)
@@ -252,13 +242,6 @@ function module_change_cb(sess, module_name, event, private_ctx)
     end
 
     action:run()
-    --if action[1] ~= nil then
-    --    local status = action[1]:send()
-    --    if not status then
-    --        collectgarbage()
-    --        return tonumber(sr.SR_ERR_INTERNAL)
-    --    end
-    --end
 
     return tonumber(sr.SR_ERR_OK)
 end

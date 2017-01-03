@@ -201,7 +201,6 @@ function Action:run()
     end
 end
 
-
 function new_ctx(yang_model, id)
     setmetatable({}, Action)
     Action.yang_model = yang_model
@@ -215,5 +214,3 @@ function new_ctx(yang_model, id)
     Action.yang_schema = yang_schema
     return Action
 end
-
-

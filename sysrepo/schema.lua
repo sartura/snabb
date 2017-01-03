@@ -14,8 +14,8 @@ local sr = require("libsysrepoLua")
 
 local Yang = {schema = nil}
 
-function Yang:get_type(xpath)
-    if xpath == nil or self.schema == nil then return nil end
+local function get_node(schema, xpath)
+    if xpath == nil or schema == nil then return nil end
 
     local function xpath_to_list(xpath)
         local xpath_ctx = sr.Xpath_Ctx()
@@ -35,20 +35,17 @@ function Yang:get_type(xpath)
     end
     local xpath_list = xpath_to_list(xpath)
 
-    local function get_type(s, list, pos)
+    local function get_node(s, list, pos)
         local ret = nil
         local function get_schema_type(s, list, pos)
             local ts = type(s)
-            if (ts ~= "table") then
-                return s
-            end
+            if (ts ~= "table") then return end
 
             for k,v in pairs(s) do
-                if (k == "keyword") then
-                elseif (k == "argument") then
+                if (k == "argument") then
                     if list[pos] == v then
-            	    pos = pos + 1
-            	    if list[pos] == nil then ret = s["keyword"] end
+                        pos = pos + 1
+                        if list[pos] == nil then ret = s end
                         get_schema_type(s["statements"], list, pos)
                     else
                         get_schema_type(v, list, pos)
@@ -60,7 +57,38 @@ function Yang:get_type(xpath)
         get_schema_type(s, list, pos)
         return ret
     end
-    return get_type(self.schema, xpath_list, 1)
+    return get_node(schema, xpath_list, 1)
+end
+
+function Yang:get_type(xpath)
+    local node = get_node(self.schema, xpath)
+    if node == nil then return nil end
+    return node["keyword"]
+end
+
+function Yang:get_keys(xpath)
+    local node = get_node(self.schema, xpath)
+    if node == nil then return nil end
+    local ret = nil
+    local function get_keys(s)
+        local ts = type(s)
+        if (ts ~= "table") then return end
+
+        for k,v in pairs(s) do
+            if (k == "keyword") then
+                if v == "key" then
+                    keys = {}
+                    for key in s["argument"]:gmatch("%w+") do table.insert(keys, key) end
+                    ret = keys
+                end
+            else
+                get_keys(v)
+            end
+        end
+    end
+    get_keys(node["statements"])
+
+    return ret
 end
 
 function new_schema_ctx(yang_model)
@@ -71,4 +99,3 @@ function new_schema_ctx(yang_model)
     Yang.schema = parsed_yang
     return Yang
 end
-
