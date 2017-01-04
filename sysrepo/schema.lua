@@ -66,8 +66,8 @@ function Yang:get_type(xpath)
     return node["keyword"]
 end
 
-function Yang:get_keys(xpath)
-    local node = get_node(self.schema, xpath)
+local function get_argument(schema, xpath, keyword)
+    local node = get_node(schema, xpath)
     if node == nil then return nil end
     local ret = nil
     local function get_keys(s)
@@ -76,10 +76,8 @@ function Yang:get_keys(xpath)
 
         for k,v in pairs(s) do
             if (k == "keyword") then
-                if v == "key" then
-                    keys = {}
-                    for key in s["argument"]:gmatch("%w+") do table.insert(keys, key) end
-                    ret = keys
+                if v == keyword then
+                    ret = s["argument"]
                 end
             else
                 get_keys(v)
@@ -89,6 +87,20 @@ function Yang:get_keys(xpath)
     get_keys(node["statements"])
 
     return ret
+end
+
+function Yang:get_keys(xpath)
+    local node = get_argument(self.schema, xpath, "key")
+    keys = {}
+    for key in node:gmatch("%w+") do table.insert(keys, key) end
+    ret = keys
+
+    return ret
+end
+
+function Yang:get_default(xpath)
+    local node = get_argument(self.schema, xpath, "default")
+    return node
 end
 
 function new_schema_ctx(yang_model)
