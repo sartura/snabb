@@ -18,39 +18,69 @@ function string.ends(String,End)
    return End=='' or string.sub(String,-string.len(End))==End
 end
 
-local function contains(list, el)
-    for key, value in pairs(list) do
-        if el == value then return true end
-    end
-    return false
-end
+function string.xpath_compare(First, Second, yang_model)
+    local ctx1 = sr.Xpath_Ctx()
+    local ctx2 = sr.Xpath_Ctx()
 
-function string.compare(First, Second)
-    if (First == nil or Second == nil) then return nil end
-    local match = 0
-    for i = 1, string.len(First) do
-        if (i > string.len(Second)) then break end
-        if (string.sub(First,i,i) ~= string.sub(Second,i,i)) then break end
-	match = i
+    local common = ""
+    local node1
+    local node2
+
+    while true do
+        if node1 == nil then
+            node1 = ctx1:next_node(First)
+	else
+            node1 = ctx1:next_node(nil)
+        end
+        if node2 == nil then
+            node2 = ctx2:next_node(Second)
+	else
+            node2 = ctx2:next_node(nil)
+        end
+
+        if (node1 == nil or node2 == nil) then break end
+
+	if (node1 == node2) then common = common.."/"..node1 end
+
+	--//TODO add namespace and keys
     end
-    return string.sub(First,1,match)
+
+    common = "/"..yang_model..":" .. string.sub(common, 2)
+    return common
 end
 
 local function get_key_value(s, xpath)
-    local result = ""
-    local yang_type = action.yang_schema:get_type(xpath)
-
-    if yang_type == "list" then
-        local keys = action.yang_schema:get_keys(xpath)
-        if keys == nil then return result end
-
+    local keys = ""
+    if (xpath == "/softwire-config/binding-table/psid-map") then
         for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
-            if contains(keys, v["keyword"]) then
-                result = result .. "[" .. v["keyword"] .. "='"..v["argument"].."']"
+            if (v["keyword"] == "addr") then
+                keys = "[addr='"..v["argument"].."']"
             end
         end end end
+    elseif (xpath == "/softwire-config/binding-table/softwire") then
+        local default_padding = nil
+        for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
+            if (v["keyword"] == "ipv4") then
+                keys = keys.."[ipv4='"..v["argument"].."']"
+            end
+        end end end
+        for k1,v1 in pairs(s) do if (type(v1) == "table") then for k,v in pairs(v1) do
+            if (v["keyword"] == "psid") then
+                keys = keys.."[psid='"..v["argument"].."']"
+            end
+        end end end
+        for k1,v1 in pairs(s) do
+            if (type(v1) == "table") then for k,v in pairs(v1) do if (v["keyword"] == "padding") then
+            default_padding = v["argument"]
+                keys = keys.."[padding='"..v["argument"].."']"
+            end
+        end end end
+        if (default_padding == nil) then
+            keys = keys.."[padding='0']"
+            --TODO add padding
+        end
     end
-    return result
+    return keys
 end
 
 local function send_to_sysrepo(sess_snabb, xpath, value)
@@ -204,7 +234,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
                     acc.xpath = old:xpath()
 		    acc.action = "remove"
 	        else
-		    local change = string.compare(old:xpath(), acc.xpath)
+		    local change = string.xpath_compare(old:xpath(), acc.xpath, module_name)
 		    if (change == old:xpath() and snabb.print_value(old) == nil and delete_all) then
                         acc.xpath = change
                         acc.action = "remove"
@@ -219,7 +249,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
                 if (acc.xpath == nil) then
                     acc.xpath = new:xpath()
                 else
-		    local change = string.compare(new:xpath(), acc.xpath)
+		    local change = string.xpath_compare(new:xpath(), acc.xpath, module_name)
 		    acc.xpath = change
 	        end
             end
@@ -227,18 +257,10 @@ function module_change_cb(sess, module_name, event, private_ctx)
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
-    local list_xpath = "/"..YANG_MODEL..":softwire-config/binding-table"
-    if (list_xpath == string.compare(list_xpath, acc.xpath) and #acc.xpath > #list_xpath) then
-        if not string.ends(acc.xpath, "/br-address") then
-            acc.xpath = list_xpath
-        end
-	acc.action = "set"
-    end
-
     if acc.action == "remove" then
-        action:delete(acc.xpath, YANG_MODEL, ID, acc.count, sess)
+        action:delete(acc.xpath, sess)
     elseif acc.action == "set" then
-        action:set(acc.xpath, YANG_MODEL, ID, acc.count, sess)
+        action:set(acc.xpath, sess)
     end
 
     action:run()

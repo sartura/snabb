@@ -136,20 +136,24 @@ local function print_trees(trees, xpath, yang_schema)
     end
 
     local yang_type = yang_schema:get_type(xpath)
-    if yang_type == "list" or yang_type == "grouping" then result = result .. "{" end
+    --if yang_type == "list" or yang_type == "grouping" then result = result .. "{" end
 
     for i = 0, trees:tree_cnt() -1, 1 do
         local tree = trees:tree(i)
-        if trees:tree_cnt() == 1 then return print_value(trees:tree(i)) end
+        if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then
+            return print_value(trees:tree(i))
+        end
         if (print_value(tree) ~= nil) then
             result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
         elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
-            result = result.." "..tree:name().." { "..print_list(tree:first_child()).."}"
+            if trees:tree_cnt() ~= 1 then result = result.." { " end
+            result = result..print_list(tree:first_child())
+            if trees:tree_cnt() ~= 1 then result = result.." } " end
         else
             result = result .. " " .. tree:name() ..""
         end
     end
-    if yang_type == "list" or yang_type == "grouping" then result = result .. "}" end
+    --if yang_type == "list" or yang_type == "grouping" then result = result .. "}" end
 
     return result
 end
@@ -166,7 +170,7 @@ local function fill_subtrees(yang_model, id, yang_schema, xpath, action, sess)
 
     local session_xpath = xpath
     local yang_type = yang_schema:get_type(xpath)
-    if yang_type == "container" or yang_type == "list" then session_xpath = session_xpath .. "/*" end
+    --if yang_type == "container" or yang_type == "list" then session_xpath = session_xpath .. "/*" end
 
     local function sysrepo_call()
 	    --todo check if not end leaf
