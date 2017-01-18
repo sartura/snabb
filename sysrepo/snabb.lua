@@ -155,6 +155,7 @@ local function print_trees(trees, xpath, yang_schema)
     end
     --if yang_type == "list" or yang_type == "grouping" then result = result .. "}" end
 
+    collectgarbage()
     return result
 end
 
@@ -178,6 +179,8 @@ local function fill_subtrees(yang_model, id, yang_schema, xpath, action, sess)
         if trees == nil then return end
         if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then result = print_value(trees:tree(0)); return; end
         result = print_trees(trees, xpath, yang_schema)
+
+        collectgarbage()
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res); return nil end
 

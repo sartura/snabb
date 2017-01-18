@@ -88,6 +88,7 @@ local function send_to_sysrepo(sess_snabb, xpath, value)
     xpath = "/"..YANG_MODEL..":" .. string.sub(xpath, 2)
     local function set()
         sess_snabb:set_item_str(xpath, value)
+        collectgarbage()
     end
     ok,res=pcall(set)
     if not ok then
@@ -158,6 +159,7 @@ local function load_snabb_data()
         else
             datastore_empty = false
 	end
+        collectgarbage()
     end
     ok,res=pcall(sysrepo_call) if not ok then datastore_empty = true end
 
@@ -208,6 +210,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
             local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
             start_sess:copy_config(YANG_MODEL, sr.SR_DS_RUNNING, sr.SR_DS_STARTUP)
             start_sess:commit()
+            collectgarbage()
         end
         ok,res=pcall(update_startup_datastore) if not ok then print(res) end
 
@@ -254,6 +257,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
 	        end
             end
 	end
+        collectgarbage()
     end
     ok,res=pcall(sysrepo_call) if not ok then print(res) end
 
@@ -265,6 +269,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
 
     action:run()
 
+    collectgarbage()
     return tonumber(sr.SR_ERR_OK)
 end
 
@@ -297,6 +302,7 @@ function dp_get_items_cb(xpath, val_holder, private_ctx)
     end
     ok,res=pcall(oper_snabb_to_sysrepo) if not ok then print(res) end
 
+    collectgarbage()
     return tonumber(sr.SR_ERR_OK)
 end
 
@@ -328,11 +334,11 @@ function main()
     subscribe:dp_get_items_subscribe("/"..YANG_MODEL..":softwire-state", wrap_oper)
 
     print("========== SUBSCRIBE TO OPERATIONAL DATA ==========")
-
     -- infinite loop
     sr.global_loop()
 
     print("Application exit requested, exiting.")
+    collectgarbage()
     os.exit(0)
 end
 ok,res=pcall(main) if not ok then print(res) end
