@@ -149,7 +149,7 @@ local function load_snabb_data()
 
     local function sysrepo_call()
         local conn = sr.Connection("application")
-        local sess = sr.Session(conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
+        local sess = sr.Session(conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
         local values = nil
         local xpath = "/" .. YANG_MODEL .. ":*//*"
         values = sess:get_items(xpath)
@@ -165,7 +165,7 @@ local function load_snabb_data()
 
     if datastore_empty then
         local conn_snabb = sr.Connection("application")
-        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
+        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
 
         local content
         local COMMAND = path.."../src/snabb config get " .. ID .. ' "/"'
@@ -189,7 +189,7 @@ local function load_snabb_data()
         ok,res=pcall(sysrepo_call) if not ok then datastore_empty = true end
     else
         local conn_snabb = sr.Connection("application")
-        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
+        local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
 
 	local binding_table_xpath = "/"..YANG_MODEL..":softwire-config"
         action:set(binding_table_xpath, sess_snabb)
@@ -207,7 +207,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
         -- commit changes to startup datastore
         local function update_startup_datastore()
             local start_conn = sr.Connection("application")
-            local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT, "netconf")
+            local start_sess = sr.Session(start_conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
             start_sess:copy_config(YANG_MODEL, sr.SR_DS_RUNNING, sr.SR_DS_STARTUP)
             start_sess:commit()
             collectgarbage()
@@ -322,7 +322,7 @@ function main()
     load_snabb_data()
 
     conn = sr.Connection("application")
-    sess = sr.Session(conn, sr.SR_DS_RUNNING, sr.SR_SESS_DEFAULT, "netconf")
+    sess = sr.Session(conn, sr.SR_DS_RUNNING, sr.SR_SESS_DEFAULT)
     subscribe = sr.Subscribe(sess)
 
     wrap = sr.Callback_lua(module_change_cb)
