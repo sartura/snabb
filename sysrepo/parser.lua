@@ -28,8 +28,6 @@
 
 module(..., package.seeall)
 
-local lib = require('core.lib')
-
 -- Returns true if x and y are structurally similar (isomorphic).
 function equal (x, y)
    if type(x) ~= type(y) then return false end
@@ -454,7 +452,4 @@ function selftest()
    argument="port", statements={{keyword="type"}}}})
    test_module('description hello/world;', {{keyword="description",
    argument="hello/world"}})
-   parse(require('lib.yang.ietf_inet_types_yang'))
-   parse(require('lib.yang.ietf_yang_types_yang'))
-   parse(require('lib.yang.ietf_softwire_yang'))
 end
