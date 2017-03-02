@@ -95,7 +95,6 @@ local function send(Snabb)
       end
       COMMAND = COMMAND.." '"..tostring(Snabb.value) .. "'"
    end
-	print(COMMAND)
    local handle = io.popen(COMMAND)
    local result = handle:read("*a")
    if (result ~= "") then
@@ -137,15 +136,16 @@ local function print_trees(trees, xpath, yang_schema)
       return result
    end
 
-   local yang_type = yang_schema:get_type(xpath)
-
    for i = 0, trees:tree_cnt() -1, 1 do
       local tree = trees:tree(i)
       if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then
          return print_value(trees:tree(i))
       end
       if (print_value(tree) ~= nil) then
-         result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
+			-- skip leafs which are values for list entries
+			if not xpath_lib.is_key(xpath..tree:name()) then
+				result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
+			end
       elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
          if trees:tree_cnt() ~= 1 then
 				result = result.." { "
