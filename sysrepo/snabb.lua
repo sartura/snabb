@@ -199,13 +199,16 @@ function Action:delete(xpath, sess)
 end
 
 function Action:run()
+	local action_failed = false
    for i=#self.action_list,1,-1 do
       local sucess = send(self.action_list[i])
       if not sucess then
          self.failed_list[#self.failed_list + 1] = self.action_list[i]
+			action_failed = true
       end
       table.remove(self.action_list, i)
    end
+	return action_failed
 end
 
 function new_ctx(yang_model, id)

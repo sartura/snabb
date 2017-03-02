@@ -354,8 +354,8 @@ function module_change_cb(sess, module_name, event, private_ctx)
    end
 
    collectgarbage()
-   local status = action:run()
-   if not status then
+   local action_failed = action:run()
+   if action_failed then
       return tonumber(sr.SR_ERR_INTERNAL)
    end
 
