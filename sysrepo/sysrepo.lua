@@ -69,8 +69,6 @@ end
 local function send_to_sysrepo(set_item_list, sess_snabb, xpath, value)
    -- sysrepo expects format "/yang-model:container/..
    xpath = "/"..YANG_MODEL..":" .. string.sub(xpath, 2)
-   --    ret = string.xpath_compare(xpath, xpath2, "snabb-softwire-v1")
-   --    print("RET -> " .. ret)
 
    local skip_node = xpath_lib.is_key(xpath)
    if not skip_node then
@@ -78,15 +76,6 @@ local function send_to_sysrepo(set_item_list, sess_snabb, xpath, value)
          table.insert(set_item_list, {xpath, value})
       end
    end
-   --local function set()
-   --    sess_snabb:set_item_str(xpath, value)
-   --    collectgarbage()
-   --end
-   --ok,res=pcall(set)
-   --if not ok then
-   --    -- set_item_str will fail for key elements
-   --    -- print(res)
-   --end
 end
 
 local function map_to_xpath(set_item_list, s, path, sess_snabb)
@@ -215,7 +204,10 @@ function module_change_cb(sess, module_name, event, private_ctx)
          start_sess:commit()
          collectgarbage()
       end
-      ok,res=pcall(update_startup_datastore) if not ok then print(res) end
+      ok,res=pcall(update_startup_datastore)
+		if not ok then
+			print(res)
+		end
 
       return tonumber(sr.SR_ERR_OK)
    end
@@ -229,7 +221,9 @@ function module_change_cb(sess, module_name, event, private_ctx)
 
       while true do
          local change = sess:get_change_next(it)
-         if (change == nil) then break end
+         if (change == nil) then
+				break
+			end
          acc.count = acc.count + 1
          if (change:oper() ~= sr.SR_OP_DELETED) then
 			   delete_all = false
@@ -308,7 +302,10 @@ function dp_get_items_cb(xpath, val_holder, private_ctx)
       end
       collectgarbage()
    end
-   ok,res=pcall(oper_snabb_to_sysrepo) if not ok then print(res) end
+   ok,res=pcall(oper_snabb_to_sysrepo)
+	if not ok then
+		print(res)
+	end
 
    collectgarbage()
    return tonumber(sr.SR_ERR_OK)
@@ -352,4 +349,7 @@ function main()
    collectgarbage()
    os.exit(0)
 end
-ok,res=pcall(main) if not ok then print(res) end
+ok,res=pcall(main)
+if not ok then
+	print(res)
+end
