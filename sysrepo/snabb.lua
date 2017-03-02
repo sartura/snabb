@@ -136,7 +136,6 @@ local function print_trees(trees, xpath, yang_schema)
    end
 
    local yang_type = yang_schema:get_type(xpath)
-   --if yang_type == "list" or yang_type == "grouping" then result = result .. "{" end
 
    for i = 0, trees:tree_cnt() -1, 1 do
       local tree = trees:tree(i)
@@ -146,14 +145,17 @@ local function print_trees(trees, xpath, yang_schema)
       if (print_value(tree) ~= nil) then
          result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
       elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
-         if trees:tree_cnt() ~= 1 then result = result.." { " end
+         if trees:tree_cnt() ~= 1 then
+				result = result.." { "
+			end
          result = result..print_list(tree:first_child())
-         if trees:tree_cnt() ~= 1 then result = result.." } " end
+         if trees:tree_cnt() ~= 1 then
+				result = result.." } "
+			end
       else
          result = result .. " " .. tree:name() ..""
       end
    end
-   --if yang_type == "list" or yang_type == "grouping" then result = result .. "}" end
 
    collectgarbage()
    return result
@@ -170,19 +172,23 @@ local function fill_subtrees(yang_model, id, yang_schema, xpath, action, sess)
    if action == "remove" then return snabb.new(action, xpath, result, id, yang_model) end
 
    local session_xpath = xpath
-   local yang_type = yang_schema:get_type(xpath)
-   --if yang_type == "container" or yang_type == "list" then session_xpath = session_xpath .. "/*" end
 
    local function sysrepo_call()
       --todo check if not end leaf
       local trees = sess:get_subtrees(session_xpath)
       if trees == nil then return end
-      if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then result = print_value(trees:tree(0)); return; end
+      if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then
+			result = print_value(trees:tree(0))
+			return
+		end
       result = print_trees(trees, xpath, yang_schema)
 
       collectgarbage()
    end
-   ok,res=pcall(sysrepo_call) if not ok then print(res); return nil end
+   ok,res=pcall(sysrepo_call) if not ok then
+	   print(res)
+		return nil
+	end
 
    collectgarbage()
    return snabb.new(action, xpath, result, id, yang_model)
@@ -199,6 +205,7 @@ function Action:delete(xpath, sess)
 end
 
 function Action:run()
+	-- create atomic commit
 	local action_failed = false
    for i=#self.action_list,1,-1 do
       local sucess = send(self.action_list[i])
@@ -219,7 +226,9 @@ function new_ctx(yang_model, id)
    Action.failed_list = {}
 
    local yang_schema = schema.new_schema_ctx(yang_model)
-   if yang_schema == nil then return nil end
+   if yang_schema == nil then
+		return nil
+	end
 
    Action.yang_schema = yang_schema
    return Action
