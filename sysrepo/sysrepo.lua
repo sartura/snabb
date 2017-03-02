@@ -9,95 +9,14 @@ end
 local params = {...}
 local yang = require_rel('parser')
 local snabb = require_rel('snabb')
+local xpath_lib = require_rel('xpath')
 
 local sr = require("libsysrepoLua")
 
 local action = nil
 
-function string.ends(String,End)
-   return End=='' or string.sub(String,-string.len(End))==End
-end
-
 function string.starts(String,Starts)
    return Starts=='' or string.sub(String,1,string.len(Starts))==Starts
-end
-
-function string.xpath_compare(First, Second, yang_model)
-   local ctx1 = sr.Xpath_Ctx()
-   local ctx2 = sr.Xpath_Ctx()
-
-   local common = ""
-   local node1
-   local node2
-
-   while true do
-      if node1 == nil then
-         node1 = ctx1:next_node(First)
-      else
-         node1 = ctx1:next_node(nil)
-      end
-      if node2 == nil then
-         node2 = ctx2:next_node(Second)
-      else
-         node2 = ctx2:next_node(nil)
-      end
-
-      if (node1 == nil or node2 == nil) then break end
-
-      if (node1 == node2) then common = common.."/"..node1 end
-
-      local keys = ""
-      local mismatch = false
-      while true do
-         local key1 = ctx1:next_key_name(nil)
-         if not key1 then break end
-         if key1 then
-            local key_value1 = ctx1:node_key_value(nil, key1)
-            local key_value2 = ctx2:node_key_value(nil, key1)
-            if key_value1 == key_value2 then
-               keys = keys.."["..key1.."='"..key_value1.."']"
-            else
-               mismatch = true
-               break
-            end
-         end
-      end
-
-      if mismatch then
-         break
-      else
-         common = common..keys
-      end
-
-   end
-
-   common = "/"..yang_model..":" .. string.sub(common, 2)
-   return common
-end
-
-function string.skip_node(xpath)
-   local ctx = sr.Xpath_Ctx()
-
-   local node = ctx:next_node(xpath)
-   if node == nil then return false end
-   local id = 0
-   while true do
-      node = ctx:next_node(nil)
-      if node == nil then break end
-      id = id + 1
-   end
-
-   if id < 1 then return true end
-
-   local last_node = ctx:node_idx(xpath, id)
-   local prev_node = ctx:node_idx(xpath, id - 1)
-
-   while true do
-      local key =  ctx:next_key_name(nil)
-      if key == nil then break end
-      if last_node == key then return true end
-   end
-   return false
 end
 
 local function get_key_value(s, xpath)
@@ -153,7 +72,7 @@ local function send_to_sysrepo(set_item_list, sess_snabb, xpath, value)
    --    ret = string.xpath_compare(xpath, xpath2, "snabb-softwire-v1")
    --    print("RET -> " .. ret)
 
-   local skip_node = string.skip_node(xpath)
+   local skip_node = xpath_lib.is_key(xpath)
    if not skip_node then
       if not string.starts(value, "<unknown>:") then
          table.insert(set_item_list, {xpath, value})
@@ -323,7 +242,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
                acc.xpath = old:xpath()
                acc.action = "remove"
             else
-               local change = string.xpath_compare(old:xpath(), acc.xpath, module_name)
+               local change = xpath_lib.xpath_compare(old:xpath(), acc.xpath, module_name)
                if (change == old:xpath() and snabb.print_value(old) == nil and delete_all) then
                   acc.xpath = change
                   acc.action = "remove"
@@ -338,7 +257,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
             if (acc.xpath == nil) then
                acc.xpath = new:xpath()
             else
-               local change = string.xpath_compare(new:xpath(), acc.xpath, module_name)
+               local change = xpath_lib.xpath_compare(new:xpath(), acc.xpath, module_name)
                acc.xpath = change
             end
          end

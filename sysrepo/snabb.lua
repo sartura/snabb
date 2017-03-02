@@ -10,6 +10,7 @@ if arg and arg[0] then
    path = arg[0]:match("(.-)[^\\/]+$") .. ""
 end
 
+local xpath_lib = require_rel('xpath')
 local schema = require_rel('schema')
 local path = ""
 if arg and arg[0] then
@@ -94,6 +95,7 @@ local function send(Snabb)
       end
       COMMAND = COMMAND.." '"..tostring(Snabb.value) .. "'"
    end
+	print(COMMAND)
    local handle = io.popen(COMMAND)
    local result = handle:read("*a")
    if (result ~= "") then
