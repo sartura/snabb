@@ -5,24 +5,16 @@ local sr = require("libsysrepoLua")
 local require_rel
 local path = ""
 if arg and arg[0] then
-   package.path = arg[0]:match("(.-)[^\\/]+$") .. "?.lua;" .. package.path
+   package.path = arg[0]:match("(.-)[^\\/]+$").."?.lua;"..package.path
    require_rel = require
-   path = arg[0]:match("(.-)[^\\/]+$") .. ""
+   path = arg[0]:match("(.-)[^\\/]+$")..""
 end
 
 local xpath_lib = require_rel('xpath')
 local schema = require_rel('schema')
-local path = ""
-if arg and arg[0] then
-   path = arg[0]:match("(.-)[^\\/]+$") .. ""
-end
-
-function string.ends(String,End)
-   return End=='' or string.sub(String,-string.len(End))==End
-end
 
 -- return string value representation
-function print_value(value)
+local function print_value(value)
    if (value:type() == sr.SR_CONTAINER_T) then
       return nil
    elseif (value:type() == sr.SR_CONTAINER_PRESENCE_T) then
@@ -63,12 +55,9 @@ end
 local Action = {yang_model = nil, id = nil, yang_schema = nil}
 Action.__index = table
 
-local Snabb = {action = nil, xpath = nil, value = nil, id=nil, yang=nil}
-
 local function format(sysrepo_xpath, yang_model)
-   local xpath = nil
    -- remove yang model from start
-   xpath = "/" .. string.sub(sysrepo_xpath, string.len("/" .. yang_model .. ":") + 1)
+   local xpath = "/"..string.sub(sysrepo_xpath, string.len("/"..yang_model..":") + 1)
    -- remove ' from key
    xpath = xpath:gsub("='","=")
    xpath = xpath:gsub("']","]")
@@ -76,7 +65,7 @@ local function format(sysrepo_xpath, yang_model)
 end
 
 -- Used to initialize Snabb objects
-function new(action, xpath, value, id, yang)
+local function new(action, xpath, value, id, yang)
    local Snabb = {}
    -- Self is a reference to values for this Animal
    Snabb.action = action
@@ -88,18 +77,18 @@ function new(action, xpath, value, id, yang)
 end
 
 local function send(Snabb)
-   local COMMAND = path .. "../src/snabb config "..Snabb.action.." "..Snabb.id.." "..Snabb.xpath
+   local COMMAND = path.."../src/snabb config "..Snabb.action.." "..Snabb.id.." "..Snabb.xpath
    if Snabb.action == "set" then
       if Snabb.value == nil then
          return false
       end
-      COMMAND = COMMAND.." '"..tostring(Snabb.value) .. "'"
+      COMMAND = COMMAND.." '"..tostring(Snabb.value).."'"
    end
    local handle = io.popen(COMMAND)
    local result = handle:read("*a")
    if (result ~= "") then
       handle:close()
-      print("COMMAND -> " .. COMMAND)
+      print("COMMAND -> "..COMMAND)
       print("ERROR:"..result)
       return false
    end
@@ -107,35 +96,24 @@ local function send(Snabb)
    return true
 end
 
-local function print_trees(trees, xpath, yang_schema)
-   local result = ""
-
-   local function sub_tree_length(tree)
-      local count = 0
-      if (tree == nil) then return count end
-      while true do
-         count = count + 1
-         tree = tree:next()
-         if tree == nil then break end
-      end
-      return count
-   end
+local function print_trees(trees, xpath)
 
    local function print_list(tree)
       local result = ""
-      if (tree == nil) then return count end
+      if (tree == nil) then return "" end
       while true do
          if tree == nil then break
          elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
             result = result.." "..tree:name().." { "..print_list(tree:first_child()).."}"
          else
-            result = result .. " " .. tree:name() .. " " .. print_value(tree) .. ";"
+            result = result.." "..tree:name().." "..print_value(tree)..";"
          end
          tree = tree:next()
       end
       return result
    end
 
+   local result = ""
    for i = 0, trees:tree_cnt() -1, 1 do
       local tree = trees:tree(i)
       if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then
@@ -144,7 +122,7 @@ local function print_trees(trees, xpath, yang_schema)
       if (print_value(tree) ~= nil) then
 			-- skip leafs which are values for list entries
 			if not xpath_lib.is_key(xpath..tree:name()) then
-				result = result .. " " .. tree:name() .." " .. print_value(tree) .. ";"
+				result = result.." "..tree:name().." "..print_value(tree)..";"
 			end
       elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
          if trees:tree_cnt() ~= 1 then
@@ -155,7 +133,7 @@ local function print_trees(trees, xpath, yang_schema)
 				result = result.." } "
 			end
       else
-         result = result .. " " .. tree:name() ..""
+         result = result.." "..tree:name()..""
       end
    end
 
@@ -163,7 +141,7 @@ local function print_trees(trees, xpath, yang_schema)
    return result
 end
 
-local function fill_subtrees(yang_model, id, yang_schema, xpath, action, sess)
+local function fill_subtrees(yang_model, id, xpath, action, sess)
    local result = ""
 
    --TODO skip problem in snabb of setting a leaf-list directly
@@ -171,7 +149,7 @@ local function fill_subtrees(yang_model, id, yang_schema, xpath, action, sess)
       xpath = "/snabb-softwire-v1:softwire-config/binding-table"
    end
 
-   if action == "remove" then return snabb.new(action, xpath, result, id, yang_model) end
+   if action == "remove" then return new(action, xpath, result, id, yang_model) end
 
    local session_xpath = xpath
 
@@ -183,26 +161,26 @@ local function fill_subtrees(yang_model, id, yang_schema, xpath, action, sess)
 			result = print_value(trees:tree(0))
 			return
 		end
-      result = print_trees(trees, xpath, yang_schema)
+      result = print_trees(trees, xpath)
 
       collectgarbage()
    end
-   ok,res=pcall(sysrepo_call) if not ok then
+   local ok,res=pcall(sysrepo_call) if not ok then
 	   print(res)
 		return nil
 	end
 
    collectgarbage()
-   return snabb.new(action, xpath, result, id, yang_model)
+   return new(action, xpath, result, id, yang_model)
 end
 
 function Action:set(xpath, sess)
-   local data = fill_subtrees(self.yang_model, self.id, self.yang_schema, xpath, "set", sess)
+   local data = fill_subtrees(self.yang_model, self.id, xpath, "set", sess)
    self.action_list[#self.action_list + 1] = data
 end
 
 function Action:delete(xpath, sess)
-   local data = fill_subtrees(self.yang_model, self.id, self.yang_schema, xpath, "remove", sess)
+   local data = fill_subtrees(self.yang_model, self.id, xpath, "remove", sess)
    self.action_list[#self.action_list + 1] = data
 end
 
