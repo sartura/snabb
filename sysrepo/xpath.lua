@@ -82,7 +82,6 @@ function is_key(xpath)
 	end
 
    local last_node = ctx:node_idx(xpath, id)
-   local prev_node = ctx:node_idx(xpath, id - 1)
 
    while true do
       local key =  ctx:next_key_name(nil)
@@ -95,5 +94,3 @@ function is_key(xpath)
    end
    return false
 end
-
-
