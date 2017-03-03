@@ -15,15 +15,18 @@ local sr = require("libsysrepoLua")
 
 local action = nil
 
-function string.starts(String,Starts)
+local YANG_MODEL = nil
+local ID = nil
+
+local function string_starts(String,Starts)
    return Starts=='' or string.sub(String,1,string.len(Starts))==Starts
 end
 
 local function get_key_value(s, xpath)
    local keys = ""
    if (xpath == "/softwire-config/binding-table/psid-map") then
-      for k1,v1 in pairs(s) do
-			if (type(v1) == "table") then for k,v in pairs(v1) do
+      for _,v1 in pairs(s) do
+			if (type(v1) == "table") then for _,v in pairs(v1) do
             if (v["keyword"] == "addr") then
                keys = "[addr='"..v["argument"].."']"
             end
@@ -32,25 +35,25 @@ local function get_key_value(s, xpath)
 	end
    elseif (xpath == "/softwire-config/binding-table/softwire") then
       local default_padding = nil
-      for k1,v1 in pairs(s) do
-			if (type(v1) == "table") then for k,v in pairs(v1) do
+      for _,v1 in pairs(s) do
+			if (type(v1) == "table") then for _,v in pairs(v1) do
             if (v["keyword"] == "ipv4") then
                keys = keys.."[ipv4='"..v["argument"].."']"
             end
          end
 	   end
 	end
-      for k1,v1 in pairs(s) do
-			if (type(v1) == "table") then for k,v in pairs(v1) do
+      for _,v1 in pairs(s) do
+			if (type(v1) == "table") then for _,v in pairs(v1) do
             if (v["keyword"] == "psid") then
                keys = keys.."[psid='"..v["argument"].."']"
             end
          end
 	   end
    end
-      for k1,v1 in pairs(s) do
+      for _,v1 in pairs(s) do
          if (type(v1) == "table") then
-				for k,v in pairs(v1) do
+				for _,v in pairs(v1) do
                if (v["keyword"] == "padding") then
                   default_padding = v["argument"]
                   keys = keys.."[padding='"..v["argument"].."']"
@@ -66,74 +69,71 @@ local function get_key_value(s, xpath)
    return keys
 end
 
-local function send_to_sysrepo(set_item_list, sess_snabb, xpath, value)
+local function send_to_sysrepo(set_item_list, xpath, value)
    -- sysrepo expects format "/yang-model:container/..
    xpath = "/"..YANG_MODEL..":" .. string.sub(xpath, 2)
 
    local skip_node = xpath_lib.is_key(xpath)
    if not skip_node then
-      if not string.starts(value, "<unknown>:") then
+      if not string_starts(value, "<unknown>:") then
          table.insert(set_item_list, {xpath, value})
       end
    end
 end
 
-local function map_to_xpath(set_item_list, s, path, sess_snabb)
+local function map_to_xpath(set_item_list, s, current_xpath)
    local ts = type(s)
    if (ts ~= "table") then
-      send_to_sysrepo(set_item_list, sess_snabb, path, s)
+      send_to_sysrepo(set_item_list, current_xpath, s)
       return end
    for k,v in pairs(s) do
-      if (k == "keyword") then
-      elseif (k == "keyword" or k == "loc" or type(k) == "number") then
-         map_to_xpath(set_item_list, v, path, sess_snabb)
+      if (k == "keyword" or k == "loc" or type(k) == "number") then
+         map_to_xpath(set_item_list, v, current_xpath)
       elseif (k == "statements") then
-         local xpath = path.."/"..tostring(s["keyword"])
-         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath), sess_snabb)
+         local xpath = current_xpath.."/"..tostring(s["keyword"])
+         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath))
       elseif (k == "argument") then
-         local xpath = path.."/"..tostring(s["keyword"])
-         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath), sess_snabb)
+         local xpath = current_xpath.."/"..tostring(s["keyword"])
+         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath))
       else
-         local xpath = path.."/"..tostring(s["keyword"])
-         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath), sess_snabb)
+         local xpath = current_xpath.."/"..tostring(s["keyword"])
+         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath))
       end
    end
    return
 end
 
-local function map_to_oper(s, path, oper_list)
+local function map_to_oper(s, current_xpath, oper_list)
    local ts = type(s)
    if (ts ~= "table") then
-      xpath = "/"..YANG_MODEL..":" .. string.sub(path, 2)
+      local xpath = "/"..YANG_MODEL..":" .. string.sub(current_xpath, 2)
       oper_list[#oper_list + 1] = {xpath, s}
       return end
    for k,v in pairs(s) do
-      if (k == "keyword") then
-      elseif (k == "keyword" or k == "loc" or type(k) == "number") then
-         map_to_oper(v, path, oper_list)
+      if (k == "keyword" or k == "loc" or type(k) == "number") then
+         map_to_oper(v, current_xpath, oper_list)
       elseif (k == "statements") then
-         local xpath = path.."/"..tostring(s["keyword"])
+         local xpath = current_xpath.."/"..tostring(s["keyword"])
          map_to_oper(v, xpath, oper_list)
       elseif (k == "argument") then
-         local xpath = path.."/"..tostring(s["keyword"])
+         local xpath = current_xpath.."/"..tostring(s["keyword"])
          map_to_oper(v, xpath, oper_list)
       else
-         local xpath = path.."/"..tostring(s["keyword"])
+         local xpath = current_xpath.."/"..tostring(s["keyword"])
          map_to_oper(v, xpath, oper_list)
       end
    end
    return
 end
 
-local function load_snabb_data(action)
+local function load_snabb_data(actions)
    local datastore_empty = false
 
    local function sysrepo_call()
       local conn = sr.Connection("application")
       local sess = sr.Session(conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
-      local values = nil
       local xpath = "/" .. YANG_MODEL .. ":*//*"
-      values = sess:get_items(xpath)
+      local values = sess:get_items(xpath)
 
       if (values == nil) then
          datastore_empty = true
@@ -142,7 +142,7 @@ local function load_snabb_data(action)
       end
       collectgarbage()
    end
-   ok,res=pcall(sysrepo_call)
+   local ok=pcall(sysrepo_call)
 	if not ok then
 	   datastore_empty = true
 	end
@@ -162,12 +162,12 @@ local function load_snabb_data(action)
       end
       handle:close()
 
-      local function sysrepo_call()
+      local function sysrepo_call_commit()
          local parsed_data = yang.parse(content, nil)
          local set_item_list = {}
-         map_to_xpath(set_item_list, parsed_data, "", sess_snabb)
+         map_to_xpath(set_item_list, parsed_data, "")
          -- set all items in the list
-         for i, el in ipairs(set_item_list) do
+         for _, el in ipairs(set_item_list) do
             sess_snabb:set_item_str(el[1], el[2])
          end
 
@@ -175,18 +175,18 @@ local function load_snabb_data(action)
          sess_snabb:commit()
          collectgarbage()
       end
-      ok,res=pcall(sysrepo_call)
-		if not ok then
-		   datastore_empty = true
+      local ok_commit, res=pcall(sysrepo_call_commit)
+		if not ok_commit then
+		   print(res)
 		end
    else
       local conn_snabb = sr.Connection("application")
       local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
 
       local binding_table_xpath = "/"..YANG_MODEL..":softwire-config"
-      action:set(binding_table_xpath, sess_snabb)
+      actions:set(binding_table_xpath, sess_snabb)
 
-      action:run()
+      actions:run()
 
       print("========== COMMIT SYSREPO CONFIG DATA TO SNABB: ==========")
       collectgarbage()
@@ -194,7 +194,7 @@ local function load_snabb_data(action)
 end
 
 -- Function to be called for subscribed client of given session whenever configuration changes.
-function module_change_cb(sess, module_name, event, private_ctx)
+local function module_change_cb(sess, module_name, event, _)
    if (event == sr.SR_EV_APPLY) then
       -- commit changes to startup datastore
       local function update_startup_datastore()
@@ -204,7 +204,7 @@ function module_change_cb(sess, module_name, event, private_ctx)
          start_sess:commit()
          collectgarbage()
       end
-      ok,res=pcall(update_startup_datastore)
+      local ok,res=pcall(update_startup_datastore)
 		if not ok then
 			print(res)
 		end
@@ -236,8 +236,8 @@ function module_change_cb(sess, module_name, event, private_ctx)
                acc.xpath = old:xpath()
                acc.action = "remove"
             else
-               local change = xpath_lib.xpath_compare(old:xpath(), acc.xpath, module_name)
-               if (change == old:xpath() and snabb.print_value(old) == nil and delete_all) then
+               local common_xpath = xpath_lib.xpath_compare(old:xpath(), acc.xpath, module_name)
+               if (common_xpath == old:xpath() and snabb.print_value(old) == nil and delete_all) then
                   acc.xpath = change
                   acc.action = "remove"
                else
@@ -251,14 +251,16 @@ function module_change_cb(sess, module_name, event, private_ctx)
             if (acc.xpath == nil) then
                acc.xpath = new:xpath()
             else
-               local change = xpath_lib.xpath_compare(new:xpath(), acc.xpath, module_name)
-               acc.xpath = change
+               acc.xpath = xpath_lib.xpath_compare(new:xpath(), acc.xpath, module_name)
             end
          end
       end
       collectgarbage()
    end
-   ok,res=pcall(sysrepo_call) if not ok then print(res) end
+   local ok,res=pcall(sysrepo_call)
+	if not ok then
+	   print(res)
+	end
 
    if acc.action == "remove" then
       action:delete(acc.xpath, sess)
@@ -276,8 +278,10 @@ function module_change_cb(sess, module_name, event, private_ctx)
 end
 
 -- Function to be called for operational data
-function dp_get_items_cb(xpath, val_holder, private_ctx)
-
+local function dp_get_items_cb(xpath, val_holder, _)
+	--TODO
+	--implement xpath
+	print(xpath)
    local snabb_state
    local COMMAND = path.."../src/snabb config get-state " .. ID .. ' "/"'
    local handle = io.popen(COMMAND)
@@ -290,19 +294,19 @@ function dp_get_items_cb(xpath, val_holder, private_ctx)
    end
    handle:close()
 
-   function oper_snabb_to_sysrepo()
+   local function oper_snabb_to_sysrepo()
       local oper_list = {}
       local parsed_data = yang.parse(snabb_state, nil)
       map_to_oper(parsed_data, "", oper_list)
 
-      vals = val_holder:allocate(#oper_list)
+      local vals = val_holder:allocate(#oper_list)
 
       for i, oper in ipairs(oper_list) do
          vals:val(i-1):set(oper[1], tonumber(oper[2]), sr.SR_UINT64_T)
       end
       collectgarbage()
    end
-   ok,res=pcall(oper_snabb_to_sysrepo)
+   local ok,res=pcall(oper_snabb_to_sysrepo)
 	if not ok then
 		print(res)
 	end
@@ -312,7 +316,7 @@ function dp_get_items_cb(xpath, val_holder, private_ctx)
 end
 
 -- Main client function.
-function main()
+local function main()
    if (params[1] == nil and params[2] == nil) then
       print("Please enter first parameter, the yang model and the ID for second")
       return
@@ -329,16 +333,16 @@ function main()
    -- load snabb startup data
    load_snabb_data(action)
 
-   conn = sr.Connection("application")
-   sess = sr.Session(conn, sr.SR_DS_RUNNING, sr.SR_SESS_DEFAULT)
-   subscribe = sr.Subscribe(sess)
+   local conn = sr.Connection("application")
+   local sess = sr.Session(conn, sr.SR_DS_RUNNING, sr.SR_SESS_DEFAULT)
+   local subscribe = sr.Subscribe(sess)
 
-   wrap = sr.Callback_lua(module_change_cb)
+   local wrap = sr.Callback_lua(module_change_cb)
    subscribe:module_change_subscribe(YANG_MODEL, wrap)
 
    print("========== STARTUP CONFIG APPLIED AS RUNNING ==========")
 
-   wrap_oper = sr.Callback_lua(dp_get_items_cb)
+   local wrap_oper = sr.Callback_lua(dp_get_items_cb)
    subscribe:dp_get_items_subscribe("/"..YANG_MODEL..":softwire-state", wrap_oper)
 
    print("========== SUBSCRIBE TO OPERATIONAL DATA ==========")
@@ -349,7 +353,7 @@ function main()
    collectgarbage()
    os.exit(0)
 end
-ok,res=pcall(main)
+local ok,res=pcall(main)
 if not ok then
 	print(res)
 end
