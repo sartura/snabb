@@ -56,7 +56,7 @@ function xpath_compare(First, Second, yang_model)
 
    end
 
-   common = "/"..yang_model..":" .. string.sub(common, 2)
+   common = "/"..yang_model..":"..string.sub(common, 2)
    return common
 end
 

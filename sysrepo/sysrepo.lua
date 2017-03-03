@@ -1,9 +1,9 @@
 local require_rel
 local path = ""
 if arg and arg[0] then
-   package.path = arg[0]:match("(.-)[^\\/]+$") .. "?.lua;" .. package.path
+   package.path = arg[0]:match("(.-)[^\\/]+$").."?.lua;"..package.path
    require_rel = require
-   path = arg[0]:match("(.-)[^\\/]+$") .. ""
+   path = arg[0]:match("(.-)[^\\/]+$")..""
 end
 
 local params = {...}
@@ -71,7 +71,7 @@ end
 
 local function send_to_sysrepo(set_item_list, xpath, value)
    -- sysrepo expects format "/yang-model:container/..
-   xpath = "/"..YANG_MODEL..":" .. string.sub(xpath, 2)
+   xpath = "/"..YANG_MODEL..":"..string.sub(xpath, 2)
 
    local skip_node = xpath_lib.is_key(xpath)
    if not skip_node then
@@ -106,7 +106,7 @@ end
 local function map_to_oper(s, current_xpath, oper_list)
    local ts = type(s)
    if (ts ~= "table") then
-      local xpath = "/"..YANG_MODEL..":" .. string.sub(current_xpath, 2)
+      local xpath = "/"..YANG_MODEL..":"..string.sub(current_xpath, 2)
       oper_list[#oper_list + 1] = {xpath, s}
       return end
    for k,v in pairs(s) do
@@ -132,7 +132,7 @@ local function load_snabb_data(actions)
    local function sysrepo_call()
       local conn = sr.Connection("application")
       local sess = sr.Session(conn, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
-      local xpath = "/" .. YANG_MODEL .. ":*//*"
+      local xpath = "/"..YANG_MODEL..":*//*"
       local values = sess:get_items(xpath)
 
       if (values == nil) then
@@ -152,11 +152,11 @@ local function load_snabb_data(actions)
       local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
 
       local content
-      local COMMAND = path.."../src/snabb config get " .. ID .. ' "/"'
+      local COMMAND = path.."../src/snabb config get "..ID..' "/"'
       local handle = io.popen(COMMAND)
       local result = handle:read("*a")
       if (result == "") then
-         print("COMMAND: " .. COMMAND)
+         print("COMMAND: "..COMMAND)
       else
          content = result
       end
@@ -216,7 +216,7 @@ local function module_change_cb(sess, module_name, event, _)
    local acc = {xpath = nil, action = nil, count = 0}
 
    local function sysrepo_call()
-      local change_path = "/" .. module_name .. ":*"
+      local change_path = "/"..module_name..":*"
       local it = sess:get_changes_iter(change_path)
 
       while true do
@@ -283,11 +283,11 @@ local function dp_get_items_cb(xpath, val_holder, _)
 	--implement xpath
 	print(xpath)
    local snabb_state
-   local COMMAND = path.."../src/snabb config get-state " .. ID .. ' "/"'
+   local COMMAND = path.."../src/snabb config get-state "..ID..' "/"'
    local handle = io.popen(COMMAND)
    local result = handle:read("*a")
    if (result == "") then
-      print("COMMAND: " .. COMMAND)
+      print("COMMAND: "..COMMAND)
       return tonumber(sr.SR_ERR_INTERNAL)
    else
       snabb_state = result
