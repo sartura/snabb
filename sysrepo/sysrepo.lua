@@ -87,7 +87,8 @@ local function map_to_xpath(set_item_list, s, current_xpath)
       send_to_sysrepo(set_item_list, current_xpath, s)
       return end
    for k,v in pairs(s) do
-      if (k == "keyword" or k == "loc" or type(k) == "number") then
+		if (k == "keyword") then
+		elseif (k == "keyword" or k == "loc" or type(k) == "number") then
          map_to_xpath(set_item_list, v, current_xpath)
       elseif (k == "statements") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
@@ -110,7 +111,8 @@ local function map_to_oper(s, current_xpath, oper_list)
       oper_list[#oper_list + 1] = {xpath, s}
       return end
    for k,v in pairs(s) do
-      if (k == "keyword" or k == "loc" or type(k) == "number") then
+		if (k == "keyword") then
+		elseif (k == "keyword" or k == "loc" or type(k) == "number") then
          map_to_oper(v, current_xpath, oper_list)
       elseif (k == "statements") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
@@ -168,7 +170,7 @@ local function load_snabb_data(actions)
          map_to_xpath(set_item_list, parsed_data, "")
          -- set all items in the list
          for _, el in ipairs(set_item_list) do
-            sess_snabb:set_item_str(el[1], el[2])
+				sess_snabb:set_item_str(el[1], el[2])
          end
 
          print("========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========")
