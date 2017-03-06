@@ -26,41 +26,41 @@ local function get_key_value(s, xpath)
    local keys = ""
    if (xpath == "/softwire-config/binding-table/psid-map") then
       for _,v1 in pairs(s) do
-			if (type(v1) == "table") then for _,v in pairs(v1) do
+         if (type(v1) == "table") then for _,v in pairs(v1) do
             if (v["keyword"] == "addr") then
                keys = "[addr='"..v["argument"].."']"
             end
          end
       end
-	end
+   end
    elseif (xpath == "/softwire-config/binding-table/softwire") then
       local default_padding = nil
       for _,v1 in pairs(s) do
-			if (type(v1) == "table") then for _,v in pairs(v1) do
+         if (type(v1) == "table") then for _,v in pairs(v1) do
             if (v["keyword"] == "ipv4") then
                keys = keys.."[ipv4='"..v["argument"].."']"
             end
          end
-	   end
-	end
+      end
+   end
       for _,v1 in pairs(s) do
-			if (type(v1) == "table") then for _,v in pairs(v1) do
+         if (type(v1) == "table") then for _,v in pairs(v1) do
             if (v["keyword"] == "psid") then
                keys = keys.."[psid='"..v["argument"].."']"
             end
          end
-	   end
+      end
    end
       for _,v1 in pairs(s) do
          if (type(v1) == "table") then
-				for _,v in pairs(v1) do
+            for _,v in pairs(v1) do
                if (v["keyword"] == "padding") then
                   default_padding = v["argument"]
                   keys = keys.."[padding='"..v["argument"].."']"
                end
             end
-	      end
-	   end
+         end
+      end
       if (default_padding == nil) then
          keys = keys.."[padding='0']"
          --TODO add padding
@@ -87,8 +87,8 @@ local function map_to_xpath(set_item_list, s, current_xpath)
       send_to_sysrepo(set_item_list, current_xpath, s)
       return end
    for k,v in pairs(s) do
-		if (k == "keyword") then
-		elseif (k == "keyword" or k == "loc" or type(k) == "number") then
+      if (k == "keyword") then
+      elseif (k == "keyword" or k == "loc" or type(k) == "number") then
          map_to_xpath(set_item_list, v, current_xpath)
       elseif (k == "statements") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
@@ -111,8 +111,8 @@ local function map_to_oper(s, current_xpath, oper_list)
       oper_list[#oper_list + 1] = {xpath, s}
       return end
    for k,v in pairs(s) do
-		if (k == "keyword") then
-		elseif (k == "keyword" or k == "loc" or type(k) == "number") then
+      if (k == "keyword") then
+      elseif (k == "keyword" or k == "loc" or type(k) == "number") then
          map_to_oper(v, current_xpath, oper_list)
       elseif (k == "statements") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
@@ -145,9 +145,9 @@ local function load_snabb_data(actions)
       collectgarbage()
    end
    local ok=pcall(sysrepo_call)
-	if not ok then
-	   datastore_empty = true
-	end
+   if not ok then
+      datastore_empty = true
+   end
 
    if datastore_empty then
       local conn_snabb = sr.Connection("application")
@@ -170,7 +170,7 @@ local function load_snabb_data(actions)
          map_to_xpath(set_item_list, parsed_data, "")
          -- set all items in the list
          for _, el in ipairs(set_item_list) do
-				sess_snabb:set_item_str(el[1], el[2])
+            sess_snabb:set_item_str(el[1], el[2])
          end
 
          print("========== COMMIT SNABB CONFIG DATA TO SYSREPO: ==========")
@@ -178,9 +178,9 @@ local function load_snabb_data(actions)
          collectgarbage()
       end
       local ok_commit, res=pcall(sysrepo_call_commit)
-		if not ok_commit then
-		   print(res)
-		end
+      if not ok_commit then
+         print(res)
+      end
    else
       local conn_snabb = sr.Connection("application")
       local sess_snabb = sr.Session(conn_snabb, sr.SR_DS_STARTUP, sr.SR_SESS_DEFAULT)
@@ -207,11 +207,16 @@ local function module_change_cb(sess, module_name, event, _)
          collectgarbage()
       end
       local ok,res=pcall(update_startup_datastore)
-		if not ok then
-			print(res)
-		end
+      if not ok then
+         print(res)
+      end
 
       return tonumber(sr.SR_ERR_OK)
+   end
+
+   if (event == sr.SR_EV_ABORT) then
+      --TODO error handling
+      return tonumber(sr.SR_ERR_INTERNAL)
    end
 
    local delete_all = true
@@ -219,17 +224,18 @@ local function module_change_cb(sess, module_name, event, _)
 
    local function sysrepo_call()
       local change_path = "/"..module_name..":*"
+      print(change_path)
       local it = sess:get_changes_iter(change_path)
 
       while true do
          local change = sess:get_change_next(it)
          if (change == nil) then
-				break
-			end
+            break
+         end
          acc.count = acc.count + 1
          if (change:oper() ~= sr.SR_OP_DELETED) then
-			   delete_all = false
-			end
+            delete_all = false
+         end
          local op = change:oper()
          local new = change:new_val()
          local old = change:old_val()
@@ -247,9 +253,20 @@ local function module_change_cb(sess, module_name, event, _)
                   acc.action = "set"
                end
             end
-         elseif (op == sr.SR_OP_CREATED or op == sr.SR_OP_MODIFIED) then
+         else
+            if (op == sr.SR_OP_CREATED) and (acc.action == "add" or acc.action == nil) then
+               if (acc.xpath == nil) then
+                  acc.xpath = new:xpath()
+               end
+               local common_xpath = xpath_lib.xpath_compare(new:xpath(), acc.xpath, module_name)
+               if (common_xpath == new:xpath()) then
+                  acc.action = "add"
+               else
+                  acc.action = "set"
+               end
+            else
+            end
             delete_all = false
-            acc.action = "set"
             if (acc.xpath == nil) then
                acc.xpath = new:xpath()
             else
@@ -257,17 +274,18 @@ local function module_change_cb(sess, module_name, event, _)
             end
          end
       end
-      collectgarbage()
    end
    local ok,res=pcall(sysrepo_call)
-	if not ok then
-	   print(res)
-	end
+   if not ok then
+      print(res)
+   end
 
    if acc.action == "remove" then
       action:delete(acc.xpath, sess)
    elseif acc.action == "set" then
       action:set(acc.xpath, sess)
+   elseif acc.action == "add" then
+      action:add(acc.xpath, sess)
    end
 
    collectgarbage()
@@ -281,9 +299,9 @@ end
 
 -- Function to be called for operational data
 local function dp_get_items_cb(xpath, val_holder, _)
-	--TODO
-	--implement xpath
-	print(xpath)
+   --TODO
+   --implement xpath
+   print(xpath)
    local snabb_state
    local COMMAND = path.."../src/snabb config get-state "..ID..' "/"'
    local handle = io.popen(COMMAND)
@@ -309,9 +327,9 @@ local function dp_get_items_cb(xpath, val_holder, _)
       collectgarbage()
    end
    local ok,res=pcall(oper_snabb_to_sysrepo)
-	if not ok then
-		print(res)
-	end
+   if not ok then
+      print(res)
+   end
 
    collectgarbage()
    return tonumber(sr.SR_ERR_OK)
@@ -328,9 +346,9 @@ local function main()
 
    action = snabb.new_ctx(YANG_MODEL, ID)
    if action == nil then
-	   print("can not find yang model in snabb")
-	   os.exit(0)
-	end
+      print("can not find yang model in snabb")
+      os.exit(0)
+   end
 
    -- load snabb startup data
    load_snabb_data(action)
@@ -357,5 +375,5 @@ local function main()
 end
 local ok,res=pcall(main)
 if not ok then
-	print(res)
+   print(res)
 end

@@ -78,7 +78,7 @@ end
 
 local function send(Snabb)
    local COMMAND = path.."../src/snabb config "..Snabb.action.." "..Snabb.id.." "..Snabb.xpath
-   if Snabb.action == "set" then
+   if Snabb.action == "set" or Snabb.action == "add" then
       if Snabb.value == nil then
          return false
       end
@@ -96,7 +96,7 @@ local function send(Snabb)
    return true
 end
 
-local function print_trees(trees, xpath)
+local function print_trees(trees, xpath, action)
 
    local function print_list(tree)
       local result = ""
@@ -106,7 +106,9 @@ local function print_trees(trees, xpath)
          elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
             result = result.." "..tree:name().." { "..print_list(tree:first_child()).."}"
          else
-            result = result.." "..tree:name().." "..print_value(tree)..";"
+            if not (xpath_lib.is_key(xpath.."/"..tree:name()) and action == "set") then
+               result = result.." "..tree:name().." "..print_value(tree)..";"
+            end
          end
          tree = tree:next()
       end
@@ -120,18 +122,18 @@ local function print_trees(trees, xpath)
          return print_value(trees:tree(i))
       end
       if (print_value(tree) ~= nil) then
-			-- skip leafs which are values for list entries
-			if not xpath_lib.is_key(xpath..tree:name()) then
-				result = result.." "..tree:name().." "..print_value(tree)..";"
-			end
+         -- skip leafs which are values for list entries
+         if not xpath_lib.is_key(xpath..tree:name()) then
+            result = result.." "..tree:name().." "..print_value(tree)..";"
+         end
       elseif tree:type() == sr.SR_LIST_T or tree:type() == sr.SR_CONTAINER_T or tree:type() == sr.SR_CONTAINER_PRESENCE_T then
          if trees:tree_cnt() ~= 1 then
-				result = result.." { "
-			end
+            result = result.." { "
+         end
          result = result..print_list(tree:first_child())
          if trees:tree_cnt() ~= 1 then
-				result = result.." } "
-			end
+            result = result.." } "
+         end
       else
          result = result.." "..tree:name()..""
       end
@@ -158,17 +160,20 @@ local function fill_subtrees(yang_model, id, xpath, action, sess)
       local trees = sess:get_subtrees(session_xpath)
       if trees == nil then return end
       if trees:tree_cnt() == 1 and trees:tree(0):first_child() == nil then
-			result = print_value(trees:tree(0))
-			return
-		end
-      result = print_trees(trees, xpath)
-
-      collectgarbage()
+         result = print_value(trees:tree(0))
+         return
+      end
+      result = print_trees(trees, xpath, action)
    end
    local ok,res=pcall(sysrepo_call) if not ok then
-	   print(res)
-		return nil
-	end
+      print(res)
+      return nil
+   end
+
+   if action == "add" then
+      result = "{ "..result.." }"
+      xpath = xpath_lib.remove_last_key(xpath)
+   end
 
    collectgarbage()
    return new(action, xpath, result, id, yang_model)
@@ -184,18 +189,23 @@ function Action:delete(xpath, sess)
    self.action_list[#self.action_list + 1] = data
 end
 
+function Action:add(xpath, sess)
+   local data = fill_subtrees(self.yang_model, self.id, xpath, "add", sess)
+   self.action_list[#self.action_list + 1] = data
+end
+
 function Action:run()
-	-- create atomic commit
-	local action_failed = false
+   -- create atomic commit
+   local action_failed = false
    for i=#self.action_list,1,-1 do
       local sucess = send(self.action_list[i])
       if not sucess then
          self.failed_list[#self.failed_list + 1] = self.action_list[i]
-			action_failed = true
+         action_failed = true
       end
       table.remove(self.action_list, i)
    end
-	return action_failed
+   return action_failed
 end
 
 function new_ctx(yang_model, id)
@@ -207,8 +217,8 @@ function new_ctx(yang_model, id)
 
    local yang_schema = schema.new_schema_ctx(yang_model)
    if yang_schema == nil then
-		return nil
-	end
+      return nil
+   end
 
    Action.yang_schema = yang_schema
    return Action
