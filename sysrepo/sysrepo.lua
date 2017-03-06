@@ -240,10 +240,10 @@ local function module_change_cb(sess, module_name, event, _)
             else
                local common_xpath = xpath_lib.xpath_compare(old:xpath(), acc.xpath, module_name)
                if (common_xpath == old:xpath() and snabb.print_value(old) == nil and delete_all) then
-                  acc.xpath = change
+                  acc.xpath = common_xpath
                   acc.action = "remove"
                else
-                  acc.xpath = change
+                  acc.xpath = common_xpath
                   acc.action = "set"
                end
             end
