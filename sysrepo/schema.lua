@@ -8,7 +8,6 @@ if arg and arg[0] then
    path = arg[0]:match("(.-)[^\\/]+$") .. ""
 end
 
-local params = {...}
 local yang = require_rel('parser')
 local sr = require("libsysrepoLua")
 
@@ -17,12 +16,12 @@ local Yang = {schema = nil}
 local function get_node(schema, xpath)
    if xpath == nil or schema == nil then return nil end
 
-   local function xpath_to_list(xpath)
+   local function xpath_to_list(_xpath)
       local xpath_ctx = sr.Xpath_Ctx()
       if xpath_ctx == nil then return nil end
 
       local xpath_list = {}
-      local node = xpath_ctx:next_node(xpath)
+      local node = xpath_ctx:next_node(_xpath)
       if node == nil then return nil end
       local i = 1
       xpath_list[i] = node
@@ -35,7 +34,7 @@ local function get_node(schema, xpath)
    end
    local xpath_list = xpath_to_list(xpath)
 
-   local function get_node(s, list, pos)
+   local function search_node(_s, _list, _pos)
       local ret = nil
       local function get_schema_type(s, list, pos)
          local ts = type(s)
@@ -54,10 +53,10 @@ local function get_node(schema, xpath)
             get_schema_type(v, list, pos)
          end
       end
-      get_schema_type(s, list, pos)
+      get_schema_type(_s, _list, _pos)
       return ret
    end
-   return get_node(schema, xpath_list, 1)
+   return search_node(schema, xpath_list, 1)
 end
 
 function Yang:get_type(xpath)
@@ -91,9 +90,9 @@ end
 
 function Yang:get_keys(xpath)
    local node = get_argument(self.schema, xpath, "key")
-   keys = {}
+   local keys = {}
    for key in node:gmatch("%w+") do table.insert(keys, key) end
-   ret = keys
+   local ret = keys
 
    return ret
 end
