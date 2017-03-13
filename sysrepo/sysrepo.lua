@@ -289,11 +289,10 @@ end
 
 -- Function to be called for operational data
 local function dp_get_items_cb(xpath, val_holder, _)
-   --TODO
-   --implement xpath
-   --print(xpath)
    local snabb_state
-   local COMMAND = path.."../src/snabb config get-state "..ID..' "/"'
+	local val
+	local snabb_xpath = "/"..string.sub(xpath, string.len("/"..YANG_MODEL..":") + 1)
+   local COMMAND = path.."../src/snabb config get-state "..ID..' "'..snabb_xpath..'"'
    local handle = io.popen(COMMAND)
    local result = handle:read("*a")
    if (result == "") then
@@ -307,12 +306,12 @@ local function dp_get_items_cb(xpath, val_holder, _)
    local function oper_snabb_to_sysrepo()
       local oper_list = {}
       local parsed_data = yang.parse(snabb_state, nil)
-      map_to_oper(parsed_data, "", oper_list)
+      map_to_oper(parsed_data, xpath, oper_list)
 
-      local vals = val_holder:allocate(#oper_list)
+      val = val_holder:allocate(#oper_list)
 
       for i, oper in ipairs(oper_list) do
-         vals:val(i-1):set(oper[1], tonumber(oper[2]), sr.SR_UINT64_T)
+         val:val(i-1):set(oper[1], tonumber(oper[2]), sr.SR_UINT64_T)
       end
       collectgarbage()
    end
