@@ -253,6 +253,8 @@ local function module_change_cb(sess, module_name, event, _)
                   acc.action = "set"
                end
             else
+					--TODO error handling
+					print("Eror")
             end
             delete_all = false
             if (acc.xpath == nil) then
