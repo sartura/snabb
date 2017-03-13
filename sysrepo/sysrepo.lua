@@ -87,16 +87,9 @@ local function map_to_xpath(set_item_list, s, current_xpath)
       send_to_sysrepo(set_item_list, current_xpath, s)
       return end
    for k,v in pairs(s) do
-      if (k == "keyword") then
-      elseif (k == "keyword" or k == "loc" or type(k) == "number") then
+      if (k == "loc" or type(k) == "number") then
          map_to_xpath(set_item_list, v, current_xpath)
-      elseif (k == "statements") then
-         local xpath = current_xpath.."/"..tostring(s["keyword"])
-         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath))
-      elseif (k == "argument") then
-         local xpath = current_xpath.."/"..tostring(s["keyword"])
-         map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath))
-      else
+		elseif (k ~= "keyword") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
          map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath))
       end
@@ -107,20 +100,15 @@ end
 local function map_to_oper(s, current_xpath, oper_list)
    local ts = type(s)
    if (ts ~= "table") then
-      local xpath = "/"..YANG_MODEL..":"..string.sub(current_xpath, 2)
-      oper_list[#oper_list + 1] = {xpath, s}
-      return end
+      if not string_starts(s, "<unknown>:") then
+			oper_list[#oper_list + 1] = {current_xpath, s}
+		end
+      return
+	end
    for k,v in pairs(s) do
-      if (k == "keyword") then
-      elseif (k == "keyword" or k == "loc" or type(k) == "number") then
+      if (k == "loc" or type(k) == "number") then
          map_to_oper(v, current_xpath, oper_list)
-      elseif (k == "statements") then
-         local xpath = current_xpath.."/"..tostring(s["keyword"])
-         map_to_oper(v, xpath, oper_list)
-      elseif (k == "argument") then
-         local xpath = current_xpath.."/"..tostring(s["keyword"])
-         map_to_oper(v, xpath, oper_list)
-      else
+		elseif (k ~= "keyword") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
          map_to_oper(v, xpath, oper_list)
       end
