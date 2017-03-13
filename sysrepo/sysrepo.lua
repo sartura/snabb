@@ -89,7 +89,7 @@ local function map_to_xpath(set_item_list, s, current_xpath)
    for k,v in pairs(s) do
       if (k == "loc" or type(k) == "number") then
          map_to_xpath(set_item_list, v, current_xpath)
-		elseif (k ~= "keyword") then
+      elseif (k ~= "keyword") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
          map_to_xpath(set_item_list, v, xpath..get_key_value(s, xpath))
       end
@@ -101,14 +101,14 @@ local function map_to_oper(s, current_xpath, oper_list)
    local ts = type(s)
    if (ts ~= "table") then
       if not string_starts(s, "<unknown>:") then
-			oper_list[#oper_list + 1] = {current_xpath, s}
-		end
+         oper_list[#oper_list + 1] = {current_xpath, s}
+      end
       return
-	end
+   end
    for k,v in pairs(s) do
       if (k == "loc" or type(k) == "number") then
          map_to_oper(v, current_xpath, oper_list)
-		elseif (k ~= "keyword") then
+      elseif (k ~= "keyword") then
          local xpath = current_xpath.."/"..tostring(s["keyword"])
          map_to_oper(v, xpath, oper_list)
       end
@@ -253,8 +253,8 @@ local function module_change_cb(sess, module_name, event, _)
                   acc.action = "set"
                end
             else
-					--TODO error handling
-					print("Eror")
+               --TODO error handling
+               print("Eror")
             end
             delete_all = false
             if (acc.xpath == nil) then
@@ -290,8 +290,8 @@ end
 -- Function to be called for operational data
 local function dp_get_items_cb(xpath, val_holder, _)
    local snabb_state
-	local val
-	local snabb_xpath = "/"..string.sub(xpath, string.len("/"..YANG_MODEL..":") + 1)
+   local val
+   local snabb_xpath = "/"..string.sub(xpath, string.len("/"..YANG_MODEL..":") + 1)
    local COMMAND = path.."../src/snabb config get-state "..ID..' "'..snabb_xpath..'"'
    local handle = io.popen(COMMAND)
    local result = handle:read("*a")
