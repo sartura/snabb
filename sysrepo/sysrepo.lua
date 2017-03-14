@@ -155,6 +155,21 @@ local function load_snabb_data(actions)
       local function sysrepo_call_commit()
          local parsed_data = yang.parse(content, nil)
          local set_item_list = {}
+         -- set default data
+         local int_xpath = "/snabb-softwire-v1:softwire-config/internal-interface/"
+         local ext_xpath = "/snabb-softwire-v1:softwire-config/external-interface/"
+         table.insert(set_item_list, {ext_xpath.."error-rate-limiting/period", "2"})
+         table.insert(set_item_list, {ext_xpath.."reassembly/max-packets", "20000"})
+         table.insert(set_item_list, {ext_xpath.."reassembly/max-fragments-per-packet", "20"})
+         table.insert(set_item_list, {ext_xpath.."mtu", "1460"})
+         table.insert(set_item_list, {ext_xpath.."generate-icmp-errors", "true"})
+         table.insert(set_item_list, {int_xpath.."error-rate-limiting/period", "2"})
+         table.insert(set_item_list, {int_xpath.."reassembly/max-fragments-per-packet", "20"})
+         table.insert(set_item_list, {int_xpath.."reassembly/max-packets", "20000"})
+         table.insert(set_item_list, {int_xpath.."mtu", "1500"})
+         table.insert(set_item_list, {int_xpath.."generate-icmp-errors", "true"})
+         table.insert(set_item_list, {int_xpath.."hairpinning", "true"})
+         --table.insert(set_item_list, {base_xpath..
          map_to_xpath(set_item_list, parsed_data, "")
          -- set all items in the list
          for _, el in ipairs(set_item_list) do
