@@ -1,5 +1,14 @@
 # Change Log
 
+## [3.1.9] - 2017-05-18
+
+* Add "snabb --version" command-line argument.
+
+* Fix issue with --reconfigurable where main process was consuming 100%
+  CPU.
+
+* Fix "ps" output for Snabb worker process.
+
 ## [3.1.8] - 2017-03-10
 
 * Retry ARP and NDP resolution indefinitely.
